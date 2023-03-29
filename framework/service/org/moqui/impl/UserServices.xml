@@ -117,6 +117,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="oldPassword" required="true"><description>Ignored if user has password admin permissions.</description></parameter>
             <parameter name="newPassword" required="true"/>
             <parameter name="newPasswordVerify" required="true"/>
+            <parameter name="tenantId" default="ec.tenantId"/>
             <parameter name="code"><description>Second factor authentication, required if second factor required for user (via group or authc factors configured)</description></parameter>
         </in-parameters>
         <out-parameters>
@@ -125,6 +126,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="updateSuccessful" type="Boolean"/>
         </out-parameters>
         <actions>
+            <script>boolean changedTenant = ec.changeTenant(tenantId)</script>
             <set field="hasPwAdminPermission" from="ec.user.hasPermission('ADMIN_PASSWORD')"/>
             <set field="passwordIssues" from="false"/>
             <set field="updateSuccessful" from="false"/>
@@ -139,7 +141,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <entity-find-one entity-name="moqui.security.UserAccount" value-field="userAccount">
                     <field-map field-name="userId" from="ec.user.userId"/></entity-find-one>
             </else></if>
-            <if condition="userAccount == null"><return message="Could not find user with name ${username}" public="true" type="danger"/></if>
+            <if condition="userAccount == null"><return message="Could not find user with name ${username} in tenant ${tenantId}" public="true" type="danger"/></if>
             <set field="userId" from="userAccount.userId"/>
             <set field="username" from="userAccount.username"/>
 
@@ -187,9 +189,9 @@ along with this software (see the LICENSE.md file). If not, see
                                         userAccount.passwordSalt ? new org.apache.shiro.util.SimpleByteSource((String) userAccount.passwordSalt) : null, "moquiRealm")
                             </script>
                             <if condition="!ec.ecfi.getCredentialsMatcher(userAccount.passwordHashType, 'Y'.equals(userAccount.passwordBase64)).doCredentialsMatch(token, info)">
-                                <return message="Password did not match current password or reset password for user ${username}" public="true" type="danger"/></if>
+                                <return message="Password did not match current password or reset password for user ${username} in tenant ${tenantId}" public="true" type="danger"/></if>
                         </then><else>
-                            <return message="Password incorrect for user ${username}" public="true" type="danger"/>
+                            <return message="Password incorrect for user ${username} in tenant ${tenantId}" public="true" type="danger"/>
                         </else></if>
                     </if>
 
@@ -212,9 +214,10 @@ along with this software (see the LICENSE.md file). If not, see
             </if>
 
             <service-call name="org.moqui.impl.UserServices.update#PasswordInternal" out-map="context"
-                    in-map="[userId:userId, newPassword:newPassword, newPasswordVerify:newPasswordVerify]"/>
+                    in-map="[userId:userId, newPassword:newPassword, newPasswordVerify:newPasswordVerify, tenantId:tenantId]"/>
             <if condition="updateSuccessful &amp;&amp; !ec.message.hasError()">
                 <message public="true" type="success">Password updated for user ${userAccount.username}</message></if>
+            <script>if (changedTenant) ec.popTenant()</script>
         </actions>
     </service>
     <service verb="update" noun="PasswordInternal" authenticate="false" allow-remote="false">
@@ -223,12 +226,14 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="newPassword" required="true"/>
             <parameter name="newPasswordVerify" required="true"/>
             <parameter name="requirePasswordChange" default-value="N"/>
+            <parameter name="tenantId" default="ec.tenantId"/>
         </in-parameters>
         <out-parameters>
             <parameter name="passwordIssues" type="Boolean"/>
             <parameter name="updateSuccessful" type="Boolean"/>
         </out-parameters>
         <actions>
+            <script>boolean changedTenant = ec.changeTenant(tenantId)</script>
             <set field="passwordIssues" from="false"/>
             <set field="updateSuccessful" from="false"/>
             <entity-find-one entity-name="moqui.security.UserAccount" value-field="userAccount"/>
@@ -316,6 +321,8 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="disabled" value="N"/>
             </service-call>
             <set field="updateSuccessful" from="true"/>
+            <message>Password updated for user ${userAccount.username} in tenant ${tenantId}</message>
+            <script>if (changedTenant) ec.popTenant()</script>
         </actions>
     </service>
 
@@ -339,10 +346,12 @@ along with this software (see the LICENSE.md file). If not, see
         <in-parameters>
             <parameter name="userId"/>
             <parameter name="username"><description>May be used instead of userId to identify user.</description></parameter>
+            <parameter name="tenantId" default="ec.tenantId"/>
             <parameter name="bodyParameters" type="Map" default="[:]"/>
             <parameter name="emailTemplateId" default-value="PASSWORD_RESET"/>
         </in-parameters>
         <actions>
+            <script>ec.changeTenant(tenantId)</script>
             <!-- find by userId -->
             <entity-find-one entity-name="moqui.security.UserAccount" value-field="userAccount" for-update="true"/>
             <if condition="userAccount == null">
@@ -356,11 +365,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <field-map field-name="emailAddress" from="username"/></entity-find-one>
             </if>
             <if condition="userAccount == null">
-                <message public="true" type="danger">Could not find account with username or email address ${username}</message>
+                <message public="true" type="danger">Could not find account with username or email address ${username}  in tenant ${tenantId}</message>
                 <return error="true" message="Account not found"/>
             </if>
             <if condition="!userAccount.emailAddress">
-                <message public="true" type="danger">Account with username ${username} does not have an email address</message>
+                <message public="true" type="danger">Account with username ${username}  in tenant ${tenantId} does not have an email address</message>
                 <return error="true" message="Account has no email address"/>
             </if>
 
@@ -379,6 +388,7 @@ along with this software (see the LICENSE.md file). If not, see
             </service-call>
             <message public="true" type="success">A reset password was sent by email to ${userAccount.emailAddress}. This password may only be used to change your password. Your current password is still valid.</message>
             <if condition="userAccount.requirePasswordChange == 'Y'"><message public="true" type="info">You must change your password before login.</message></if>
+            <script>if (changedTenant) ec.popTenant()</script>
         </actions>
     </service>
 
