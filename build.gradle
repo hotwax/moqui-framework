@@ -75,7 +75,7 @@ task cleanDb { doLast {
 } }
 task cleanLog(type: Delete) { delete fileTree(dir: moquiRuntime+'/log', include: '*') }
 task cleanSessions(type: Delete) { delete fileTree(dir: moquiRuntime+'/sessions', include: '*') }
-task cleanLoadSave(type: Delete) { delete file('SaveH2.zip'); delete file('SaveDEFAULT.zip')
+task cleanLoadSave(type: Delete) { delete file('SaveH2.zip'); delete file('SaveDEFAULT.zip'); delete file('SaveTenant.zip');
     delete file('SaveTransactional.zip'); delete file('SaveAnalytical.zip'); delete file('SaveOrientDb.zip')
     delete file('SaveElasticSearch.zip'); delete file('SaveOpenSearch.zip') }
 task cleanPlusRuntime(type: Delete) { delete file(plusRuntimeName) }
@@ -625,7 +625,7 @@ task load(type: JavaExec) {
     dependsOn checkRuntime, allBuildTasks
     systemProperties = ['moqui.conf':moquiConfDev, 'moqui.runtime':moquiRuntime]
     workingDir = '.'; jvmArgs = ['-server']; main = '-jar'
-    args = [warName, 'load', (project.properties.containsKey('types') ? "types=${types}" : "types=all")]
+    args = [warName, 'load', (project.properties.containsKey('types') ? "types=${types}" : "types=all"), (project.properties.containsKey('tenantId') ? "tenantId=${tenantId}" : "types=all")]
 }
 task loadSeed(type: JavaExec) {
     dependsOn checkRuntime, allBuildTasks
@@ -649,6 +649,8 @@ task loadProduction(type: JavaExec) {
 task saveDb { doLast {
     if (file(moquiRuntime+'/db/derby/moqui').exists())
         ant.zip(destfile: 'SaveDerby.zip') { fileset(dir: moquiRuntime+'/db/derby/moqui') { include(name: '**/*') } }
+    if (file(moquiRuntime+'/db/derby/MoquiTenant').exists())
+        ant.zip(destfile: 'SaveTenant.zip') { fileset(dir: moquiRuntime+'/db/derby/MoquiTenant') { include(name: '**/*') } }
     if (file(moquiRuntime+'/db/h2').exists())
         ant.zip(destfile: 'SaveH2.zip') { fileset(dir: moquiRuntime+'/db/h2') { include(name: '**/*') } }
     if (file(moquiRuntime+'/db/orientdb/databases').exists())
@@ -690,6 +692,7 @@ task reloadSave {
     dependsOn allBuildTasks
     doLast {
         if (file('SaveDerby.zip').exists()) copy { from zipTree('SaveDerby.zip'); into file(moquiRuntime+'/db/derby/moqui') }
+        if (file('SaveTenant.zip').exists()) copy { from zipTree('SaveTenant.zip'); into file(moquiRuntime+'/db/derby/MoquiTenant') }
         if (file('SaveH2.zip').exists()) copy { from zipTree('SaveH2.zip'); into file(moquiRuntime+'/db/h2') }
         if (file('SaveOrientDb.zip').exists()) copy { from zipTree('SaveOrientDb.zip'); into file(moquiRuntime+'/db/orientdb/databases') }
 
