@@ -266,6 +266,7 @@ along with this software (see the LICENSE.md file). If not, see
         <field name="targetServerUrl" type="text-medium"/>
         <field name="targetUsername" type="text-medium"/>
         <field name="targetPassword" type="text-medium" encrypt="true"/>
+        <field name="targetTenantId" type="text-medium"/>
         <field name="targetPath" type="text-medium">
             <description>For sending to via file the path and filename to use, or path/filename pattern using Groovy string expand</description></field>
         <field name="keepRemoveInfoHours" type="number-decimal"/>
