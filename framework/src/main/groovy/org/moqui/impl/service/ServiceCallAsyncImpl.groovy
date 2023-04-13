@@ -91,6 +91,7 @@ class ServiceCallAsyncImpl extends ServiceCallImpl implements ServiceCallAsync {
 
     static class AsyncServiceInfo implements Externalizable {
         transient ExecutionContextFactoryImpl ecfiLocal
+        String threadTenantId
         String threadUsername
         String serviceName
         Map<String, Object> parameters
@@ -98,6 +99,7 @@ class ServiceCallAsyncImpl extends ServiceCallImpl implements ServiceCallAsync {
         AsyncServiceInfo() { }
         AsyncServiceInfo(ExecutionContextImpl eci, String serviceName, Map<String, Object> parameters) {
             ecfiLocal = eci.ecfi
+            threadTenantId = eci.tenantId
             threadUsername = eci.userFacade.username
             this.serviceName = serviceName
             this.parameters = new HashMap<>(parameters)
@@ -111,6 +113,7 @@ class ServiceCallAsyncImpl extends ServiceCallImpl implements ServiceCallAsync {
 
         @Override
         void writeExternal(ObjectOutput out) throws IOException {
+            out.writeUTF(threadTenantId) // never null
             out.writeObject(threadUsername) // might be null
             out.writeUTF(serviceName) // never null
             out.writeObject(parameters)
@@ -118,6 +121,7 @@ class ServiceCallAsyncImpl extends ServiceCallImpl implements ServiceCallAsync {
 
         @Override
         void readExternal(ObjectInput objectInput) throws IOException, ClassNotFoundException {
+            threadTenantId = objectInput.readUTF()
             threadUsername = (String) objectInput.readObject()
             serviceName = objectInput.readUTF()
             parameters = (Map<String, Object>) objectInput.readObject()
@@ -157,8 +161,9 @@ class ServiceCallAsyncImpl extends ServiceCallImpl implements ServiceCallAsync {
                 }
 
                 threadEci = getEcfi().getEci()
+                threadEci.changeTenant(threadTenantId)
                 if (threadUsername != null && threadUsername.length() > 0) {
-                    threadEci.userFacade.internalLoginUser(threadUsername, false)
+                    threadEci.userFacade.internalLoginUser(threadUsername, threadTenantId, false)
                 } else {
                     threadEci.userFacade.loginAnonymousIfNoUser()
                 }

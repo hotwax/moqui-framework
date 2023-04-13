@@ -62,7 +62,6 @@ public class EntityValueImpl extends EntityValueBase {
         EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
         StringBuilder sql = eqb.sqlTopLevel;
         sql.append("INSERT INTO ").append(ed.getFullTableName()).append(" (");
-
         int size = fieldInfoArray.length;
         StringBuilder values = new StringBuilder(size*3);
 
@@ -79,7 +78,6 @@ public class EntityValueImpl extends EntityValueBase {
         }
 
         sql.append(") VALUES (").append(values.toString()).append(")");
-
         try {
             efi.getEntityDbMeta().checkTableRuntime(ed);
 
@@ -92,7 +90,7 @@ public class EntityValueImpl extends EntityValueBase {
                 eqb.setPreparedStatementValue(i + 1, valueMapInternal.getByIString(fieldInfo.name, fieldInfo.index), fieldInfo);
             }
 
-            // if (ed.entityName == "Subscription") logger.warn("Create ${this.toString()} tx ${efi.getEcfi().transaction.getTransactionManager().getTransaction()} con ${eqb.connection}")
+            // if (ed.entityName == "Subscription") logger.warn("Create ${this.toString()} in tenant ${efi.tenantId} tx ${efi.getEcfi().transaction.getTransactionManager().getTransaction()} con ${eqb.connection}")
             eqb.executeUpdate();
             setSyncedWithDb();
         } catch (SQLException e) {
@@ -112,13 +110,12 @@ public class EntityValueImpl extends EntityValueBase {
     public void updateExtended(FieldInfo[] pkFieldArray, FieldInfo[] nonPkFieldArray, Connection con) throws SQLException {
         EntityDefinition ed = getEntityDefinition();
         final EntityFacadeImpl efi = getEntityFacadeImpl();
+        logger.info("++++++++++++++++++++++  EFI Tenant Id "+efi.tenantId+" ++++++++++++++++++++++++");
         if (ed.isViewEntity) throw new EntityException("Update not yet implemented for view-entity");
-
         final EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
         ArrayList<EntityConditionParameter> parameters = eqb.parameters;
         StringBuilder sql = eqb.sqlTopLevel;
         sql.append("UPDATE ").append(ed.getFullTableName()).append(" SET ");
-
         int size = nonPkFieldArray.length;
         for (int i = 0; i < size; i++) {
             FieldInfo fieldInfo = nonPkFieldArray[i];
@@ -132,13 +129,14 @@ public class EntityValueImpl extends EntityValueBase {
 
         try {
             efi.getEntityDbMeta().checkTableRuntime(ed);
-
-            if (con != null) eqb.useConnection(con);
-            else eqb.makeConnection(false);
+            
+            if(con != null){ logger.info("++++++++++++++++++++++"+con.toString()+"++++++++++++++++++++");  eqb.useConnection(con);}
+            else{logger.info("++++++++++++++++++++++ Making Connection ++++++++++++++++++++++++"); 
+                eqb.makeConnection(false);}
             eqb.makePreparedStatement();
             eqb.setPreparedStatementValues();
 
-            // if (ed.entityName == "Subscription") logger.warn("Update ${this.toString()} tx ${efi.getEcfi().transaction.getTransactionManager().getTransaction()} con ${eqb.connection}")
+            // if (ed.entityName == "Subscription") logger.warn("Update ${this.toString()} in tenant ${efi.tenantId} tx ${efi.getEcfi().transaction.getTransactionManager().getTransaction()} con ${eqb.connection}")
             if (eqb.executeUpdate() == 0)
                 throw new EntityException("Tried to update a value that does not exist [" + this.toString() + "]. SQL used was " + eqb.sqlTopLevel.toString() + ", parameters were " + eqb.parameters.toString());
             setSyncedWithDb();
@@ -146,7 +144,7 @@ public class EntityValueImpl extends EntityValueBase {
             String txName = "[could not get]";
             try { txName = efi.ecfi.transactionFacade.getTransactionManager().getTransaction().toString(); }
             catch (Exception txe) { if (logger.isTraceEnabled()) logger.trace("Error getting transaction name: " + txe.toString()); }
-            logger.warn("Error updating " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
+            logger.warn("Error in update of " + this.toString() + " in tenant " + efi.getTenantId() + " tx " + txName + " con " + eqb.connection.toString(), e);
             throw e;
         } finally {
             try { eqb.closeAll(); }

@@ -67,7 +67,7 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
                 if (sd != null) {
                     inParameterNames = sd.getInParameterNames();
                 } else if (isEntityAutoPattern()) {
-                    EntityDefinition ed = ecfi.entityFacade.getEntityDefinition(noun);
+                    EntityDefinition ed = ecfi.getEntityFacade().getEntityDefinition(noun);
                     if (ed != null) inParameterNames = ed.getAllFieldNames();
                 }
 
@@ -154,15 +154,18 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
         // get these before cleaning up the parameters otherwise will be removed
         String username = null;
         String password = null;
+        String tenantId = null;
         if (currentParameters.containsKey("authUsername")) {
             username = (String) currentParameters.get("authUsername");
             password = (String) currentParameters.get("authPassword");
+            tenantId = (String) currentParameters.get("authTenantId");
         } else if (currentParameters.containsKey("authUserAccount")) {
             Map authUserAccount = (Map) currentParameters.get("authUserAccount");
             username = (String) authUserAccount.get("username");
             if (username == null || username.isEmpty()) username = (String) currentParameters.get("authUsername");
             password = (String) authUserAccount.get("currentPassword");
             if (password == null || password.isEmpty()) password = (String) currentParameters.get("authPassword");
+            tenantId = (String) currentParameters.get("authTenantId");
         }
 
         final String serviceType = sd != null ? sd.serviceType : "entity-implicit";
@@ -199,7 +202,7 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
 
         // always try to login the user if parameters are specified
         if (username != null && password != null && username.length() > 0 && password.length() > 0) {
-            userLoggedIn = eci.getUser().loginUser(username, password);
+            userLoggedIn = eci.getUser().loginUser(username, password, tenantId);
             // if user was not logged in we should already have an error message in place so just return
             if (!userLoggedIn) return null;
         }
@@ -389,6 +392,8 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
             }
 
             return result;
+        } catch (TransactionException e) {
+            throw e;
         } finally {
             // clear the semaphore
             if (sd.hasSemaphore) clearSemaphore(eci, currentParameters);

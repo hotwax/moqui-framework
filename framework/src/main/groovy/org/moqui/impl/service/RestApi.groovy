@@ -153,7 +153,7 @@ class RestApi {
                   version:(resourceNode.version ?: '1.0'), description:(resourceNode.description ?: '')],
             host:hostName, basePath:fullBasePath.toString(), schemes:schemes,
             securityDefinitions:[basicAuth:[type:'basic', description:'HTTP Basic Authentication'],
-                api_key:[type:"apiKey", name:"api_key", in:"header", description:'HTTP Header api_key']],
+                api_key:[type:"apiKey", name:"api_key", in:"header", description:'HTTP Header api_key, also supports tenant_id header']],
             consumes:['application/json', 'multipart/form-data'], produces:['application/json'],
         ]
 
@@ -409,7 +409,7 @@ class RestApi {
         }
 
         void addToSwaggerMap(Map<String, Object> swaggerMap, Map<String, Map<String, Object>> resourceMap) {
-            EntityDefinition ed = ecfi.entityFacade.getEntityDefinition(entityName)
+            EntityDefinition ed = ecfi.getEntityFacade().getEntityDefinition(entityName)
             if (ed == null) throw new IllegalArgumentException("Entity ${entityName} not found")
             // Node entityNode = ed.getEntityNode()
 
@@ -493,7 +493,7 @@ class RestApi {
         Map<String, Object> getRamlMap(Map<String, Object> typesMap) {
             Map<String, Object> ramlMap = null
 
-            EntityDefinition ed = ecfi.entityFacade.getEntityDefinition(entityName)
+            EntityDefinition ed = ecfi.getEntityFacade().getEntityDefinition(entityName)
             if (ed == null) throw new IllegalArgumentException("Entity ${entityName} not found")
 
             String refDefName = ed.getShortOrFullEntityName()

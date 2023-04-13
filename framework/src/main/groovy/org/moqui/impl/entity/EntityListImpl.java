@@ -36,6 +36,7 @@ import java.util.*;
 public class EntityListImpl implements EntityList {
     protected static final Logger logger = LoggerFactory.getLogger(EntityConditionFactoryImpl.class);
     private transient EntityFacadeImpl efiTransient;
+    protected String tenantId;
     private ArrayList<EntityValue> valueList;
     private boolean fromCache = false;
     protected Integer offset = null;
@@ -46,28 +47,32 @@ public class EntityListImpl implements EntityList {
 
     public EntityListImpl(EntityFacadeImpl efi) {
         this.efiTransient = efi;
+        tenantId = efi.getTenantId();
         valueList = new ArrayList<>(30);// default size, at least enough for common pagination
     }
 
     public EntityListImpl(EntityFacadeImpl efi, int initialCapacity) {
         this.efiTransient = efi;
+        tenantId = efi.getTenantId();
         valueList = new ArrayList<>(initialCapacity);
     }
 
     @Override public void writeExternal(ObjectOutput out) throws IOException {
+        out.writeObject(tenantId.toCharArray());
         out.writeObject(valueList);
         // don't serialize fromCache, will default back to false which is fine for a copy
     }
 
     @SuppressWarnings("unchecked")
     @Override public void readExternal(ObjectInput objectInput) throws IOException, ClassNotFoundException {
+        tenantId = new String((char[]) objectInput.readObject());
         valueList = (ArrayList<EntityValue>) objectInput.readObject();
     }
 
     @SuppressWarnings("unchecked")
     public EntityFacadeImpl getEfi() {
         if (efiTransient == null)
-            efiTransient = ((ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory()).entityFacade;
+            efiTransient = ((ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory()).getEntityFacade(tenantId);
         return efiTransient;
     }
 
@@ -171,7 +176,8 @@ public class EntityListImpl implements EntityList {
                 if (hasSetValue && compValue instanceof Set) {
                     Set valSet = (Set) compValue;
                     if (!valSet.contains(curValue)) { matches = false; break; }
-                } else if (!curValue.equals(compValue)) {
+                } 
+                if (!curValue.equals(compValue)) {
                     matches = false;
                     break;
                 }

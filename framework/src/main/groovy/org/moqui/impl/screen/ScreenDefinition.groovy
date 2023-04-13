@@ -68,6 +68,7 @@ class ScreenDefinition {
     protected Map<String, TransitionItem> transitionByName = new HashMap<>()
     protected Map<String, SubscreensItem> subscreensByName = new HashMap<>()
     protected ArrayList<SubscreensItem> subscreensItemsSorted = null
+    protected Set<String> tenantsAllowed = new HashSet<>()
     protected ArrayList<SubscreensItem> subscreensNoSubPath = null
     protected String defaultSubscreensItem = null
 
@@ -251,6 +252,9 @@ class ScreenDefinition {
             if (subscreensNoSubPath == null) subscreensNoSubPath = new ArrayList<>()
             subscreensNoSubPath.add(si)
         }
+
+        // tenants-allowed
+        if (screenNode.attribute("tenants-allowed")) tenantsAllowed.addAll(Arrays.asList((screenNode.attribute("tenants-allowed")).split(",")))
 
         // macro-template - go through entire list and set all found, basically we want the last one if there are more than one
         List<MNode> macroTemplateList = screenNode.children("macro-template")
@@ -457,6 +461,7 @@ class ScreenDefinition {
     MNode getSubscreensNode() { return subscreensNode }
     MNode getWebSettingsNode() { return webSettingsNode }
     String getLocation() { return location }
+    Set<String> getTenantsAllowed() { return tenantsAllowed }
 
     String getDefaultSubscreensItem() { return defaultSubscreensItem }
     ArrayList<SubscreensItem> getSubscreensNoSubPath() { return subscreensNoSubPath }
@@ -652,7 +657,7 @@ class ScreenDefinition {
             SubscreensItem si = (SubscreensItem) allItems.get(i)
             // check the menu include flag
             if (!si.menuInclude) continue
-            // valid in current context? (user group, etc)
+            // valid in current context? (user group, tenant, etc)
             if (!si.isValidInCurrentContext()) continue
             // made it through the checks? add it in...
             filteredList.add(si)
@@ -1239,6 +1244,7 @@ class ScreenDefinition {
         protected boolean noSubPath = false
         protected Class disableWhenGroovy = null
         protected String userGroupId = null
+        protected Set<String> tenantsAllowed = null
 
         SubscreensItem(String name, String location, MNode screen, ScreenDefinition parentScreen) {
             this.parentScreen = parentScreen
@@ -1260,6 +1266,10 @@ class ScreenDefinition {
 
             if (subscreensItem.attribute("disable-when")) disableWhenGroovy = parentScreen.sfi.ecfi.getGroovyClassLoader()
                     .parseClass(subscreensItem.attribute("disable-when"), "${parentScreen.location}.subscreens_item_${name}.disable_when")
+            if (subscreensItem.attribute("tenants-allowed")) {
+                String tenantsAllowedStr = subscreensItem.attribute("tenants-allowed")
+                tenantsAllowed = new TreeSet(tenantsAllowedStr.split(',') as List)
+            }
         }
 
         SubscreensItem(EntityValue subscreensItem, ScreenDefinition parentScreen) {
@@ -1271,6 +1281,10 @@ class ScreenDefinition {
             menuInclude = subscreensItem.menuInclude == "Y"
             noSubPath = subscreensItem.noSubPath == "Y"
             userGroupId = subscreensItem.userGroupId
+            if (subscreensItem.tenantsAllowed) {
+                String tenantsAllowedStr = subscreensItem.tenantsAllowed
+                tenantsAllowed = new TreeSet(tenantsAllowedStr.split(',') as List)
+            }
         }
 
         String getDefaultTitle() {
@@ -1294,6 +1308,8 @@ class ScreenDefinition {
             ExecutionContextImpl eci = parentScreen.sfi.getEcfi().getEci()
             // if the subscreens item is limited to a UserGroup make sure user is in that group
             if (userGroupId && !(userGroupId in eci.getUser().getUserGroupIdSet())) return false
+            // if limited to tenants make sure active tenant is one of them
+            if (tenantsAllowed != null && !(tenantsAllowed.contains(eci.getTenantId()))) return false
 
             return true
         }

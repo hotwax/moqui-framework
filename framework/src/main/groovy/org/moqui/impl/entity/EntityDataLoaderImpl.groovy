@@ -81,8 +81,11 @@ class EntityDataLoaderImpl implements EntityDataLoader {
     Map<String, Object> defaultValues = null
 
     EntityDataLoaderImpl(EntityFacadeImpl efi) {
+        
+        logger.info("======== Constructor called from Make Data Loader method ----------------------")
         this.efi = efi
         this.sfi = efi.ecfi.serviceFacade
+        
     }
 
     EntityFacadeImpl getEfi() { return efi }
@@ -185,7 +188,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
         EntityXmlHandler exh = new EntityXmlHandler(this, lvh)
         EntityCsvHandler ech = new EntityCsvHandler(this, lvh)
         EntityJsonHandler ejh = new EntityJsonHandler(this, lvh)
-
+logger.info("---------------- Entity Data Laoder Impl calling internal run ------------------------ " );
         internalRun(exh, ech, ejh)
         return exh.getValuesRead() + ech.getValuesRead() + ejh.getValuesRead()
     }
@@ -202,6 +205,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
     }
 
     void internalRun(EntityXmlHandler exh, EntityCsvHandler ech, EntityJsonHandler ejh) {
+        logger.info("---------------- internal run called  ------------------------ " );
         // make sure reverse relationships exist
         efi.createAllAutoReverseManyRelationships()
         ExecutionContextImpl eci = efi.ecfi.getEci()
@@ -270,6 +274,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
         }
         if (locationList && logger.isInfoEnabled()) {
             StringBuilder lm = new StringBuilder("Loading entity data from the following locations: ")
+            logger.info("+++++++++====="+efi.tenantId);
             for (String loc in locationList) lm.append("\n - ").append(loc)
             logger.info(lm.toString())
             logger.info("Loading data types: ${dataTypes ?: 'ALL'}")
@@ -281,9 +286,12 @@ class EntityDataLoaderImpl implements EntityDataLoader {
 
         TransactionFacadeImpl tf = efi.ecfi.transactionFacade
         tf.runRequireNew(transactionTimeout, "Error loading entity data", false, true, {
+            
+            logger.info("+++-------------- Closure running")
             // load the XML text in its own transaction
             if (this.xmlText) {
                 tf.runUseOrBegin(transactionTimeout, "Error loading XML entity data", {
+                    logger.info("---------------- EDLI parsing xml in internal run   ------------------------ " )
                     XMLReader reader = SAXParserFactory.newInstance().newSAXParser().XMLReader
                     exh.setLocation("xmlText")
                     reader.setContentHandler(exh)
@@ -331,6 +339,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
     }
 
     void loadSingleFile(String location, EntityXmlHandler exh, EntityCsvHandler ech, EntityJsonHandler ejh) {
+        logger.info("---------------- EDLI parsing running load single file    ------------------------ " )
         TransactionFacade tf = efi.ecfi.transactionFacade
         boolean beganTransaction = tf.begin(transactionTimeout)
         try {
@@ -346,12 +355,14 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                 int messagesBefore = exh.valueHandler.messageList != null ? exh.valueHandler.messageList.size() : 0
 
                 if (location.endsWith(".xml")) {
+                    logger.info("+++-------------- is xml")
                     long beforeRecords = exh.valuesRead ?: 0
                     exh.setLocation(location)
 
                     SAXParser parser = SAXParserFactory.newInstance().newSAXParser()
+                    logger.info("+++-------------- is sax parsing")
                     parser.parse(inputStream, exh)
-
+                    logger.info("+++-------------- is sax parsed")
                     recordsLoaded = (exh.valuesRead?:0) - beforeRecords
                     logger.info("Loaded ${recordsLoaded} records from ${location} in ${((System.currentTimeMillis() - beforeTime)/1000)}s")
                 } else if (location.endsWith(".csv")) {
@@ -867,6 +878,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                                 valuesRead++
                             }
                         } catch (EntityException e) {
+                            
                             throw new SAXException("Error storing entity [${currentEntityDef.getFullEntityName()}] value (file ${location} line ${locator?.lineNumber}): " + e.toString(), e)
                         } finally {
                             currentEntityDef = (EntityDefinition) null

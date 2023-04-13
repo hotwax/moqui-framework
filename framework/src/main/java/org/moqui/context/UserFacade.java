@@ -93,14 +93,15 @@ public interface UserFacade {
     /** Authenticate a user and make active in this ExecutionContext (and session of WebExecutionContext if applicable).
      * @param username An ID to match the UserAccount.username field.
      * @param password The user's current password.
+     * @param tenantId The ID of the Tenant to login to. Optional, defaults to no tenant (the base/root instance).
      * @return true if user was logged in, otherwise false
      */
-    boolean loginUser(String username, String password);
+    boolean loginUser(String username, String password, String tenantId);
     /** Remove (logout) active user. */
     void logoutUser();
 
     /** Authenticate a user and make active using a login key */
-    boolean loginUserKey(String loginKey);
+    boolean loginUserKey(String loginKey, String tenantId);
     /** Get a login key for the active user. By default expires in the number of hours configured in the Conf XML file in: user-facade.login-key.@expire-hours */
     String getLoginKey();
     String getLoginKey(float expireHours);

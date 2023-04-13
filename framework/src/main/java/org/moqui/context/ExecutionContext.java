@@ -19,6 +19,7 @@ import java.util.concurrent.Future;
 
 import groovy.lang.Closure;
 import org.moqui.entity.EntityFacade;
+import org.moqui.entity.EntityValue;
 import org.moqui.screen.ScreenFacade;
 import org.moqui.service.ServiceFacade;
 import org.moqui.util.ContextBinding;
@@ -50,6 +51,13 @@ public interface ExecutionContext {
      * ExecutionContext to be reused. The instanceClass may be null in scripts or other contexts where static typing
      * is not needed */
     <V> V getTool(@Nonnull String toolName, Class<V> instanceClass, Object... parameters);
+
+    /** Get current Tenant ID. A single application may be run in multiple virtual instances, one for each Tenant, and
+     * each will have its own set of databases (except for the tenant database which is shared among all Tenants).
+     */
+    @Nonnull String getTenantId();
+    @Nonnull EntityValue getTenant();
+
 
     /** If running through a web (HTTP servlet) request offers access to the various web objects/information.
      * If not running in a web context will return null.
@@ -99,8 +107,15 @@ public interface ExecutionContext {
      * for the current thread. */
     void initWebFacade(@Nonnull String webappMoquiName, @Nonnull HttpServletRequest request, @Nonnull HttpServletResponse response);
 
+    /** Change the active tenant and push the tenantId on a stack. Does nothing if tenantId is the current.
+     *  @return True if tenant changed, false otherwise (tenantId matches the current tenantId) */
+    boolean changeTenant(@Nonnull String tenantId);
+    /** Change the tenant to the last tenantId on the stack. Returns false if the tenantId stack is empty.
+     * @return True if tenant changed, false otherwise (tenantId stack is empty or tenantId matches the current tenantId) */
+    boolean popTenant();
+    
     /** A lightweight asynchronous executor. ExecutionContext aware and uses a new ExecutionContext in the separate thread
-     * based on the current (retaining user, disable authz, etc and may be improved over time to copy more). */
+     * based on the current (retaining user, tenant and disable authz, etc and may be improved over time to copy more). */
     Future runAsync(@Nonnull Closure closure);
 
     /** This should be called when the ExecutionContext won't be used any more. Implementations should make sure

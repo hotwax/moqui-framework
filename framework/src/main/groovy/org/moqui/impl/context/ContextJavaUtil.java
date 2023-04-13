@@ -194,8 +194,9 @@ public class ContextJavaUtil {
             if (runningTime > maxTimeMillis) maxTimeMillis = runningTime;
         }
 
+        // NOTE: ArtifactHitBin always created in DEFAULT tenant since data is aggregated across all tenants, mostly used to monitor performance
         EntityValue makeAhbValue(ExecutionContextFactoryImpl ecfi, Timestamp binEndDateTime) {
-            EntityValueBase ahb = (EntityValueBase) ecfi.entityFacade.makeValue("moqui.server.ArtifactHitBin");
+            EntityValueBase ahb = (EntityValueBase) ecfi.defaultEntityFacade.makeValue("moqui.server.ArtifactHitBin");
             ahb.put("artifactType", statsInfo.artifactTypeEnum.name());
             ahb.put("artifactSubType", statsInfo.artifactSubType);
             ahb.put("artifactName", statsInfo.artifactName);
@@ -216,7 +217,7 @@ public class ContextJavaUtil {
     }
 
     public static class ArtifactHitInfo {
-        String visitId, userId;
+        String tenantId, visitId, userId;
         boolean isSlowHit;
         ArtifactExecutionInfo.ArtifactType artifactTypeEnum;
         String artifactSubType, artifactName;
@@ -230,6 +231,7 @@ public class ContextJavaUtil {
         ArtifactHitInfo(ExecutionContextImpl eci, boolean isSlowHit, ArtifactExecutionInfo.ArtifactType artifactTypeEnum,
                         String artifactSubType, String artifactName, long startTime, double runningTimeMillis,
                         Map<String, Object> parameters, Long outputSize) {
+            tenantId = eci.getTenantId();
             visitId = eci.userFacade.getVisitId();
             userId = eci.userFacade.getUserId();
             this.isSlowHit = isSlowHit;
@@ -254,7 +256,8 @@ public class ContextJavaUtil {
             }
         }
         EntityValue makeAhiValue(ExecutionContextFactoryImpl ecfi) {
-            EntityValueBase ahp = (EntityValueBase) ecfi.entityFacade.makeValue("moqui.server.ArtifactHit");
+            // NOTE: ArtifactHit saved in current tenant, ArtifactHitBin saved in DEFAULT tenant
+            EntityValueBase ahp = (EntityValueBase) ecfi.getEntityFacade(tenantId).makeValue("moqui.server.ArtifactHit");
             ahp.put("visitId", visitId);
             ahp.put("userId", userId);
             ahp.put("isSlowHit", isSlowHit ? 'Y' : 'N');
@@ -361,7 +364,7 @@ public class ContextJavaUtil {
                 try {
                     if (con != null && !con.isClosed()) con.closeInternal();
                 } catch (Throwable t) {
-                    logger.error("Error closing connection for group " + con.getGroupName(), t);
+                    logger.error("Error closing connection for  tenant" + con.getTenantId() + " group " + con.getGroupName(), t);
                 }
             }
             txConByGroup.clear();
@@ -465,19 +468,21 @@ public class ContextJavaUtil {
      * The close() method does nothing, only closed when closeInternal() called by TransactionFacade on commit,
      * rollback, or destroy (when transactions are also cleaned up as a last resort).
      *
-     * Connections are attached to 2 things: entity group and transaction.
+     * Connections are attached to 3 things: entity group, tenant, and transaction.
      */
     public static class ConnectionWrapper implements Connection {
         protected Connection con;
         TransactionFacadeImpl tfi;
-        String groupName;
+        String tenantId, groupName;
 
-        public ConnectionWrapper(Connection con, TransactionFacadeImpl tfi, String groupName) {
+        public ConnectionWrapper(Connection con, TransactionFacadeImpl tfi, String tenantId, String groupName) {
             this.con = con;
             this.tfi = tfi;
+            this.tenantId = tenantId;
             this.groupName = groupName;
         }
 
+        public String getTenantId() { return tenantId; }
         public String getGroupName() { return groupName; }
 
         public void closeInternal() throws SQLException {
@@ -567,7 +572,7 @@ public class ContextJavaUtil {
         @Override public int hashCode() { return con.hashCode(); }
         @Override public boolean equals(Object obj) { return obj instanceof Connection && con.equals(obj); }
         @Override public String toString() {
-            return "Group: " + groupName + ", Con: " + con.toString();
+            return "Tenant: " + tenantId + ", Group: " + groupName + ", Con: " + con.toString();
         }
         /* these don't work, don't think we need them anyway:
         protected Object clone() throws CloneNotSupportedException {

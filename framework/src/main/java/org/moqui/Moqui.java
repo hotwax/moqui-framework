@@ -114,6 +114,7 @@ public class Moqui {
      * @param argMap Arguments, generally from command line, to configure this data load.
      */
     public static void loadData(Map<String, String> argMap) {
+        logger.info("+++++++++++++++++++++++ running load data ++++++++++++++++++++++++++");
         if (argMap.containsKey("raw") || argMap.containsKey("no-fk-create"))
             System.setProperty("entity_disable_fk_create", "true");
 
@@ -127,9 +128,12 @@ public class Moqui {
         ec.getArtifactExecution().push("loadData", ArtifactExecutionInfo.AT_OTHER, ArtifactExecutionInfo.AUTHZA_ALL, false);
         ec.getArtifactExecution().setAnonymousAuthorizedAll();
 
-        // login anonymous user
+        // set tenant and user
+        String tenantId = argMap.get("tenantId");
+        if (tenantId != null && tenantId.length() > 0) ec.changeTenant(tenantId);
         ec.getUser().loginAnonymousIfNoUser();
 
+        logger.info("++++++++++++++++ "+ tenantId);
         // set the data load parameters
         EntityDataLoader edl = ec.getEntity().makeDataLoader();
         if (argMap.containsKey("types")) {

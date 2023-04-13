@@ -54,7 +54,8 @@ public class CacheFacadeImpl implements CacheFacade {
     protected CacheManager distCacheManagerInternal = (CacheManager) null
 
     final ConcurrentMap<String, Cache> localCacheMap = new ConcurrentHashMap<>()
-
+    protected final Map<String, Boolean> cacheTenantsShare = new HashMap<String, Boolean>()
+    
     CacheFacadeImpl(ExecutionContextFactoryImpl ecfi) {
         this.ecfi = ecfi
 
@@ -84,6 +85,26 @@ public class CacheFacadeImpl implements CacheFacade {
         }
     }
 
+    protected String getFullName(String cacheName, String tenantId) {
+        if (cacheName == null) return null
+        if (cacheName.contains("__")) return cacheName
+        if (isTenantsShare(cacheName)) {
+            return cacheName
+        } else {
+            if (!tenantId) tenantId = ecfi.getEci().getTenantId()
+            return tenantId.concat("__").concat(cacheName)
+        }
+    }
+    protected boolean isTenantsShare(String cacheName) {
+        Boolean savedVal = cacheTenantsShare.get(cacheName)
+        if (savedVal != null) return savedVal.booleanValue()
+
+        MNode cacheElement = getCacheNode(cacheName)
+        boolean attrVal = cacheElement?.attribute("tenants-share") == "true"
+        cacheTenantsShare.put(cacheName, attrVal)
+        return attrVal
+    }
+    
     @Override
     void clearAllCaches() { for (Cache cache in localCacheMap.values()) cache.clear() }
 
@@ -100,26 +121,36 @@ public class CacheFacadeImpl implements CacheFacade {
     }
 
     @Override
-    Cache getCache(String cacheName) { return getCacheInternal(cacheName, "local") }
+    Cache getCache(String cacheName) { return getCacheInternal(cacheName, null, "local") }
     @Override
     <K, V> Cache<K, V> getCache(String cacheName, Class<K> keyType, Class<V> valueType) {
-        return getCacheInternal(cacheName, "local")
+        return getCacheInternal(cacheName, null, "local")
     }
 
     @Override
+    Cache getCache(String cacheName, String tenantId) {
+        return getCacheInternal(cacheName, tenantId, "local")
+    }
+    
+    @Override
     MCache getLocalCache(String cacheName) {
-        return getCacheInternal(cacheName, "local").unwrap(MCache.class)
+        return getCacheInternal(cacheName, null, "local").unwrap(MCache.class)
+    }
+
+    MCache getLocalCache(String cacheName, String tenantId) {
+        return getCacheInternal(cacheName, tenantId, "local").unwrap(MCache.class)
     }
     @Override
     Cache getDistributedCache(String cacheName) {
-        return getCacheInternal(cacheName, "distributed")
+        return getCacheInternal(cacheName, null, "distributed")
     }
 
-    Cache getCacheInternal(String cacheName, String defaultCacheType) {
-        Cache theCache = localCacheMap.get(cacheName)
+    Cache getCacheInternal(String cacheName, String tenantId, String defaultCacheType) {
+        String fullName = getFullName(cacheName, tenantId)
+        Cache theCache = localCacheMap.get(fullName)
         if (theCache == null) {
-            localCacheMap.putIfAbsent(cacheName, initCache(cacheName, defaultCacheType))
-            theCache = localCacheMap.get(cacheName)
+            localCacheMap.putIfAbsent(fullName, initCache(cacheName, tenantId, defaultCacheType))
+            theCache = localCacheMap.get(fullName)
         }
         return theCache
     }
@@ -131,14 +162,17 @@ public class CacheFacadeImpl implements CacheFacade {
     }
 
     @Override
-    boolean cacheExists(String cacheName) { return localCacheMap.containsKey(cacheName) }
+    boolean cacheExists(String cacheName) { return localCacheMap.containsKey(getFullName(cacheName, null)) }
     @Override
     Set<String> getCacheNames() { return localCacheMap.keySet() }
 
     List<Map<String, Object>> getAllCachesInfo(String orderByField, String filterRegexp) {
+        String tenantId = ecfi.getEci().getTenantId()
+        String tenantPrefix = tenantId + "__"
         boolean hasFilterRegexp = filterRegexp != null && filterRegexp.length() > 0
         List<Map<String, Object>> ci = new LinkedList()
         for (String cn in localCacheMap.keySet()) {
+            if (tenantId != "DEFAULT" && !cn.startsWith(tenantPrefix)) continue
             if (hasFilterRegexp && !cn.matches("(?i).*" + filterRegexp + ".*")) continue
             Cache co = getCache(cn)
             /* TODO: somehow support external cache stats like Hazelcast, through some sort of Moqui interface or maybe the JMX bean?
@@ -189,7 +223,9 @@ public class CacheFacadeImpl implements CacheFacade {
         return cacheElement
     }
 
-    protected synchronized Cache initCache(String cacheName, String defaultCacheType) {
+    protected synchronized Cache initCache(String cacheName, String tenantId, String defaultCacheType) {
+        if (cacheName.contains("__")) cacheName = cacheName.substring(cacheName.indexOf("__") + 2)
+        String fullCacheName = getFullName(cacheName, tenantId)
         if (localCacheMap.containsKey(cacheName)) return localCacheMap.get(cacheName)
 
         if (!defaultCacheType) defaultCacheType = "local"
@@ -271,7 +307,7 @@ public class CacheFacadeImpl implements CacheFacade {
                 config = (Configuration) mutConfig
             }
 
-            newCache = cacheManager.createCache(cacheName, config)
+            newCache = cacheManager.createCache(fullCacheName, config)
         } else {
             CacheManager cacheManager
             boolean storeByValue
@@ -289,7 +325,7 @@ public class CacheFacadeImpl implements CacheFacade {
             MutableConfiguration mutConfig = new MutableConfiguration()
             mutConfig.setStoreByValue(storeByValue).setStatisticsEnabled(true)
             // any defaults we want here? better to use underlying defaults and conf file settings only
-            newCache = cacheManager.createCache(cacheName, mutConfig)
+            newCache = cacheManager.createCache(fullCacheName, mutConfig)
         }
 
         // NOTE: put in localCacheMap done in caller (getCache)

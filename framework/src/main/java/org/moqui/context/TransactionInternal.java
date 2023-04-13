@@ -25,7 +25,7 @@ public interface TransactionInternal {
 
     TransactionManager getTransactionManager();
     UserTransaction getUserTransaction();
-    DataSource getDataSource(EntityFacade ef, MNode datasourceNode);
+    DataSource getDataSource(EntityFacade ef, MNode datasourceNode, String tenantId);
 
     void destroy();
 }

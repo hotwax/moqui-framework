@@ -185,6 +185,7 @@ class ScreenTestImpl implements ScreenTest {
             ExecutionContextFactoryImpl ecfi = sti.ecfi
             ExecutionContextImpl localEci = ecfi.getEci()
             String username = localEci.userFacade.getUsername()
+            String tenantId = localEci.tenantId
             Subject loginSubject = localEci.userFacade.getCurrentSubject()
             boolean authzDisabled = localEci.artifactExecutionFacade.getAuthzDisabled()
             ScreenTestRenderImpl stri = this
@@ -195,7 +196,7 @@ class ScreenTestImpl implements ScreenTest {
                     try {
                         ExecutionContextImpl threadEci = ecfi.getEci()
                         if (loginSubject != null) threadEci.userFacade.internalLoginSubject(loginSubject)
-                        else if (username != null && !username.isEmpty()) threadEci.userFacade.internalLoginUser(username)
+                        else if (username != null && !username.isEmpty()) threadEci.userFacade.internalLoginUser(username, tenantId)
                         if (authzDisabled) threadEci.artifactExecutionFacade.disableAuthz()
                         // as this is used for server-side transition calls don't do tarpit checks
                         threadEci.artifactExecutionFacade.disableTarpit()

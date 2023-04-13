@@ -758,6 +758,9 @@ abstract class EntityFindBase implements EntityFind {
         boolean isViewEntity = ed.isViewEntity
         EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot view tenantcommon entities through tenant ${efi.tenantId}")
+
         if (entityInfo.isInvalidViewEntity) throw new EntityException("Cannot do find for view-entity with name ${entityName} because it has no member entities or no aliased fields.")
 
         // find EECA rules deprecated, not worth performance hit: efi.runEecaRules(ed.getFullEntityName(), simpleAndMap, "find-one", true)
@@ -1041,6 +1044,9 @@ abstract class EntityFindBase implements EntityFind {
         EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo
         boolean isViewEntity = entityInfo.isView
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot view tenantcommon entities through tenant ${efi.tenantId}")
+        
         if (entityInfo.isInvalidViewEntity) throw new EntityException("Cannot do find for view-entity with name ${entityName} because it has no member entities or no aliased fields.")
 
         // there may not be a simpleAndMap, but that's all we have that can be treated directly by the EECA
@@ -1211,6 +1217,9 @@ abstract class EntityFindBase implements EntityFind {
         EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo
         boolean isViewEntity = entityInfo.isView
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot view tenantcommon entities through tenant ${efi.tenantId}")
+        
         if (entityInfo.isInvalidViewEntity) throw new EntityException("Cannot do find for view-entity with name ${entityName} because it has no member entities or no aliased fields.")
 
         // there may not be a simpleAndMap, but that's all we have that can be treated directly by the EECA
@@ -1337,6 +1346,9 @@ abstract class EntityFindBase implements EntityFind {
         EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo
         boolean isViewEntity = entityInfo.isView
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot view tenantcommon entities through tenant ${efi.tenantId}")
+        
         // there may not be a simpleAndMap, but that's all we have that can be treated directly by the EECA
         // find EECA rules deprecated, not worth performance hit: efi.runEecaRules(ed.getFullEntityName(), simpleAndMap, "find-count", true)
 
@@ -1443,7 +1455,9 @@ abstract class EntityFindBase implements EntityFind {
 
         EntityDefinition ed = getEntityDef()
         if (ed.entityInfo.createOnly) throw new EntityException("Entity ${ed.getFullEntityName()} is create-only (immutable), cannot be updated.")
-
+        if (ed.entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant ${efi.ecfi.eci.tenantId}")
+        
         this.useCache(false)
         long totalUpdated = 0
         EntityListIterator eli = (EntityListIterator) null
@@ -1478,7 +1492,9 @@ abstract class EntityFindBase implements EntityFind {
 
         EntityDefinition ed = getEntityDef()
         if (ed.entityInfo.createOnly) throw new EntityException("Entity ${ed.getFullEntityName()} is create-only (immutable), cannot be deleted.")
-
+        if (ed.entityInfo.isTenantcommon && !"DEFAULT".equals(efi.tenantId))
+            throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant ${efi.tenantId}")
+        
         // if there are no EECAs for the entity OR there is a TransactionCache in place just call ev.delete() on each
         // NOTE DEJ 20200716 always use EV delete, not all JDBC drivers support ResultSet.deleteRow()... like MySQL Connector/J 8.0.20
         // boolean useEvDelete = txCache != null || efi.hasEecaRules(ed.getFullEntityName())

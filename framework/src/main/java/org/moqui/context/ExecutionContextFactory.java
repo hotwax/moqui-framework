@@ -70,6 +70,7 @@ public interface ExecutionContextFactory {
 
     /** For interactions with a relational database. */
     @Nonnull EntityFacade getEntity();
+    EntityFacade getEntity(@Nonnull String tenantId);
 
     /** For interactions with ElasticSearch using the built in HTTP REST client. */
     @Nonnull ElasticFacade getElastic();

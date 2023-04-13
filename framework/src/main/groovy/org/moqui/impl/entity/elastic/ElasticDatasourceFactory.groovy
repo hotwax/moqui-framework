@@ -50,17 +50,18 @@ class ElasticDatasourceFactory implements EntityDatasourceFactory {
 
     protected EntityFacadeImpl efi
     protected MNode datasourceNode
-    protected String indexPrefix, clusterName
+    protected String indexPrefix, clusterName, tenantId
 
     protected Set<String> checkedEntityIndexSet = new HashSet<String>()
 
     ElasticDatasourceFactory() { }
 
     @Override
-    EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode) {
+    EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode,String tenantId) {
         // local fields
         this.efi = (EntityFacadeImpl) ef
         this.datasourceNode = datasourceNode
+        this.tenantId = tenantId
 
         // init the DataSource
         MNode inlineOtherNode = datasourceNode.first("inline-other")

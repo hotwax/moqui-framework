@@ -768,6 +768,9 @@ class ScreenRenderImpl implements ScreenRender {
 
         boolean loggedInAnonymous = false
         try {
+            if (sd.getTenantsAllowed() && !sd.getTenantsAllowed().contains(ec.getTenantId()))
+                throw new ArtifactAuthorizationException("The screen ${sd.getScreenName()} is not available to tenant ${ec.getTenantId()}")
+            
             if (requireAuthentication == "anonymous-all") {
                 ec.artifactExecutionFacade.setAnonymousAuthorizedAll()
                 loggedInAnonymous = ec.userFacade.loginAnonymousIfNoUser()
@@ -859,6 +862,9 @@ class ScreenRenderImpl implements ScreenRender {
                 for (int i = 0; i < screenUrlInfo.renderPathDifference; i++) {
                     ScreenDefinition permSd = screenPathDefList.get(i)
 
+                    if (permSd.getTenantsAllowed() && !permSd.getTenantsAllowed().contains(ec.getTenantId()))
+                        throw new ArtifactAuthorizationException("The screen ${permSd.getScreenName()} is not available to tenant ${ec.getTenantId()}")
+                    
                     // check the subscreens item for this screen (valid in context)
                     if (i > 0) {
                         String curPathName = screenUrlInfo.fullPathNameList.get(i - 1) // one lower in path as it doesn't have root screen
@@ -1132,6 +1138,8 @@ class ScreenRenderImpl implements ScreenRender {
         }
 
         ScreenDefinition screenDef = getNextScreenDef()
+        if (screenDef.getTenantsAllowed() && !screenDef.getTenantsAllowed().contains(ec.getTenantId()))
+            throw new ArtifactAuthorizationException("The screen ${screenDef.getScreenName()} is not available to tenant ${ec.getTenantId()}")
         // check the subscreens item for this screen (valid in context)
         if (screenPathIndex > 0) {
             String curPathName = getNextScreenPathName()
@@ -2178,7 +2186,7 @@ class ScreenRenderImpl implements ScreenRender {
         // if no setting default to STT_INTERNAL
         if (stteId == null) stteId = "STT_INTERNAL"
 
-        EntityFacadeImpl entityFacade = sfi.ecfi.entityFacade
+        EntityFacadeImpl entityFacade = sfi.ecfi.getEntityFacade(ec.tenantId)
         // see if there is a user setting for the theme
         String themeId = entityFacade.fastFindOne("moqui.security.UserScreenTheme", true, true, ec.userFacade.userId, stteId)?.screenThemeId
         // if no user theme see if group a user is in has a theme

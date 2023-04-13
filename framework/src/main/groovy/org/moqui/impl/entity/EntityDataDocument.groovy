@@ -391,13 +391,14 @@ class EntityDataDocument {
     String mergeValueToDocMap(EntityValue ev, DataDocumentInfo ddi, Map<String, Map> documentMapMap,
             ArrayList<Map> documentMapList, String docTsString) {
         /*
-          - _index = DataDocument.indexName
+          - _index = tenantId + "__" + DataDocument.indexName
           - _type = dataDocumentId
           - _id = pk field values from primary entity, double colon separated
           - _timestamp = document created time
           - Map for primary entity with primaryEntityName as key
           - nested List of Maps for each related entity with aliased fields with relationship name as key
          */
+        ExecutionContextImpl eci = efi.ecfi.getEci()
         String docId = ddi.makeDocId(ev)
         // logger.warn("DataDoc record PKs string: " + docId)
         Map<String, Object> docMap = ddi.hasAllPrimaryPks ? ((Map<String, Object>) documentMapMap.get(docId)) : (Map<String, Object>) null
@@ -407,7 +408,8 @@ class EntityDataDocument {
             docMap.put("_type", ddi.dataDocumentId)
             if (docId != null && !docId.isEmpty()) docMap.put("_id", docId)
             docMap.put('_timestamp', docTsString)
-            String _index = ddi.dataDocument.indexName
+            String _index = eci.getTenantId()
+            if (ddi.dataDocument.indexName) _index = _index + "__" + ddi.dataDocument.indexName
             if (_index != null && !_index.isEmpty()) docMap.put('_index', _index.toLowerCase())
             docMap.put('_entity', ddi.primaryEd.getShortOrFullEntityName())
 

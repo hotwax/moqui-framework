@@ -17,6 +17,7 @@ import org.codehaus.groovy.runtime.DefaultGroovyMethods;
 
 import org.moqui.Moqui;
 import org.moqui.context.ArtifactExecutionInfo;
+import org.moqui.context.ArtifactAuthorizationException;
 import org.moqui.context.ExecutionContext;
 import org.moqui.entity.EntityException;
 import org.moqui.entity.EntityFind;
@@ -55,7 +56,7 @@ public abstract class EntityValueBase implements EntityValue {
     private static final String UPDATE_ERROR = "Error updating ${entityName} ${primaryKeys}";
     private static final String DELETE_ERROR = "Error deleting ${entityName} ${primaryKeys}";
     private static final String REFRESH_ERROR = "Error finding ${entityName} ${primaryKeys}";
-
+    protected String tenantId;
     private String entityName;
     protected final LiteStringMap<Object> valueMapInternal;
 
@@ -78,6 +79,7 @@ public abstract class EntityValueBase implements EntityValue {
 
     public EntityValueBase(EntityDefinition ed, EntityFacadeImpl efip) {
         efiTransient = efip;
+        tenantId = efip.tenantId;
         entityName = ed.fullEntityName;
         entityDefinitionTransient = ed;
         valueMapInternal = new LiteStringMap<>(ed.allFieldNameList.size()).useManualIndex();
@@ -87,12 +89,14 @@ public abstract class EntityValueBase implements EntityValue {
         // NOTE: found that the serializer in Hazelcast is slow with writeUTF(), uses String.charAt() in a for loop
         // NOTE2: in Groovy this results in castToType() overhead anyway, so for now use writeUTF/readUTF as other serialization might be more efficient
         out.writeUTF(entityName);
+        out.writeUTF(tenantId);
         out.writeObject(valueMapInternal);
     }
 
     @SuppressWarnings("unchecked")
     @Override public void readExternal(ObjectInput objectInput) throws IOException, ClassNotFoundException {
         entityName = objectInput.readUTF();
+        tenantId = objectInput.readUTF();
         LiteStringMap<Object> lsm;
         try {
             lsm = (LiteStringMap<Object>) objectInput.readObject();
@@ -115,7 +119,7 @@ public abstract class EntityValueBase implements EntityValue {
         if (efiTransient == null) {
             ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory();
             if (ecfi == null) throw new EntityException("No ExecutionContextFactory found, cannot get EntityFacade for new EVB for entity " + entityName);
-            efiTransient = ecfi.entityFacade;
+            efiTransient = ecfi.getEntityFacade(tenantId);
         }
         return efiTransient;
     }
@@ -1503,6 +1507,9 @@ public abstract class EntityValueBase implements EntityValue {
         final ExecutionContextImpl ec = ecfi.getEci();
         final ArtifactExecutionFacadeImpl aefi = ec.artifactExecutionFacade;
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(ec.getTenantId()))
+            throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant " + ec.getTenantId());
+        
         // check/set defaults
         if (entityInfo.hasFieldDefaults) checkSetFieldDefaults(ed, ec, null);
 
@@ -1591,6 +1598,9 @@ public abstract class EntityValueBase implements EntityValue {
         final boolean needsAuditLog = entityInfo.needsAuditLog;
         final boolean createOnlyAny = entityInfo.createOnly || entityInfo.createOnlyFields;
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(ec.getTenantId()))
+            throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant " + ec.getTenantId());
+        
         // check/set defaults for pk fields, do this first to fill in optional pk fields
         if (hasFieldDefaults) checkSetFieldDefaults(ed, ec, true);
 
@@ -1749,6 +1759,9 @@ public abstract class EntityValueBase implements EntityValue {
         final ExecutionContextImpl ec = ecfi.getEci();
         final ArtifactExecutionFacadeImpl aefi = ec.artifactExecutionFacade;
 
+        if (entityInfo.isTenantcommon && !"DEFAULT".equals(ec.getTenantId()))
+            throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant " + ec.getTenantId());
+        
         // NOTE: this is create-only on the entity, ignores setting on fields (only considered in update)
         if (entityInfo.createOnly) throw new EntityException("Entity [" + getEntityName() + "] is create-only (immutable), cannot be deleted.");
 

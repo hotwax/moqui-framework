@@ -1,4 +1,4 @@
-/*
+ /*
  * This software is in the public domain under CC0 1.0 Universal plus a 
  * Grant of Patent License.
  * 
@@ -20,6 +20,7 @@ import org.moqui.context.ArtifactExecutionInfo
 import org.moqui.context.ArtifactExecutionInfo.AuthzAction
 import org.moqui.context.ExecutionContext
 import org.moqui.resource.ResourceReference
+ import org.moqui.entity.EntityCondition
 import org.moqui.entity.EntityList
 import org.moqui.entity.EntityValue
 import org.moqui.impl.context.ArtifactExecutionInfoImpl
@@ -287,6 +288,12 @@ class ScreenUrlInfo {
             boolean isLast = ((i + 1) == screenPathDefListSize)
             MNode screenNode = screenDef.getScreenNode()
 
+            // if screen is limited to certain tenants, and current tenant is not in the Set, it is not permitted
+            if (screenDef.getTenantsAllowed().size() > 0 && !screenDef.getTenantsAllowed().contains(ec.getTenantId())) {
+                if (permittedCacheKey != null) aefi.screenPermittedCache.put(permittedCacheKey, false)
+                return false
+            }
+            
             String requireAuthentication = screenNode.attribute('require-authentication')
             allowedByScreenDefinitionView = "anonymous-view".equals(requireAuthentication)
             allowedByScreenDefinitionAll = "anonymous-all".equals(requireAuthentication)
@@ -668,7 +675,11 @@ class ScreenUrlInfo {
             String subscreenName = null
 
             // check SubscreensDefault records
-            EntityList subscreensDefaultList = ecfi.entity.find("moqui.screen.SubscreensDefault")
+            EntityCondition tenantCond = ecfi.entity.conditionFactory.makeCondition(
+                    ecfi.entity.conditionFactory.makeCondition("tenantId", EntityCondition.EQUALS, ecfi.eci.tenantId),
+                    EntityCondition.OR,
+                    ecfi.entity.conditionFactory.makeCondition("tenantId", EntityCondition.EQUALS, null))
+            EntityList subscreensDefaultList = ecfi.entity.find("moqui.screen.SubscreensDefault").condition(tenantCond)
                     .condition("screenLocation", lastSd.location).useCache(true).disableAuthz().list()
             for (int i = 0; i < subscreensDefaultList.size(); i++) {
                 EntityValue subscreensDefault = subscreensDefaultList.get(i)
@@ -972,7 +983,7 @@ class ScreenUrlInfo {
             this.expandAliasTransition = expandAliasTransition
             if (expandAliasTransition != null && expandAliasTransition.booleanValue()) expandTransitionAliasUrl()
 
-            // logger.warn("======= Creating UrlInstance ${sui.getFullPathNameList()} - ${sui.targetScreen.getLocation()} - ${sui.getTargetTransitionActualName()}")
+//             logger.warn("======= Creating UrlInstance ${sui.getFullPathNameList()} - ${sui.targetScreen.getLocation()} - ${sui.getTargetTransitionActualName()}")
         }
 
         String getRequestMethod() { return ec.web != null ? ec.web.request.method : "" }

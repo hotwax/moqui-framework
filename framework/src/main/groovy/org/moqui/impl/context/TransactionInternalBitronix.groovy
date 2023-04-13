@@ -65,14 +65,15 @@ class TransactionInternalBitronix implements TransactionInternal {
     UserTransaction getUserTransaction() { return ut }
 
     @Override
-    DataSource getDataSource(EntityFacade ef, MNode datasourceNode) {
+    DataSource getDataSource(EntityFacade ef, MNode datasourceNode, String tenantId) {
         // NOTE: this is called during EFI init, so use the passed one and don't try to get from ECFI
         EntityFacadeImpl efi = (EntityFacadeImpl) ef
-
+        logger.info("------------------------------------- Get data source for tenant "+tenantId+"------------------------------------------------------------------------")
         EntityFacadeImpl.DatasourceInfo dsi = new EntityFacadeImpl.DatasourceInfo(efi, datasourceNode)
 
         PoolingDataSource pds = new PoolingDataSource()
         pds.setUniqueName(dsi.uniqueName)
+        logger.info("------------------------------------- Pooling Data Source "+dsi.uniqueName+"------------------------------------------------------------------------")
         if (dsi.xaDsClass) {
             pds.setClassName(dsi.xaDsClass)
             pds.setDriverProperties(dsi.xaProps)
@@ -145,7 +146,7 @@ class TransactionInternalBitronix implements TransactionInternal {
         }
 
         logger.info("Initializing DataSource ${dsi.uniqueName} (${dsi.database.attribute('name')}) with properties: ${dsi.dsDetails}")
-
+logger.info("------------------------------------- Calling pds init ------------------------------------------------------------------------")
         // init the DataSource
         pds.init()
         logger.info("Init DataSource ${dsi.uniqueName} (${dsi.database.attribute('name')}) isolation ${pds.getIsolationLevel()} (${isolationInt}), max pool ${pds.getMaxPoolSize()}")

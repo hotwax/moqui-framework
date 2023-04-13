@@ -92,6 +92,7 @@ public class MoquiStart {
             System.out.println("    no-fk-create ---------------- Don't create foreign-keys, for empty database to avoid referential integrity errors");
             System.out.println("    dummy-fks ------------------- Use dummy foreign-keys to avoid referential integrity errors");
             System.out.println("    use-try-insert -------------- Try insert and update on error instead of checking for record first");
+            System.out.println("    -tenantId=<tenantId> --------- ID for the Tenant to load the data into");
             System.out.println("    disable-eeca ---------------- Disable Entity ECA rules");
             System.out.println("    disable-audit-log ----------- Disable Entity Audit Log");
             System.out.println("    disable-data-feed ----------- Disable Entity DataFeed");

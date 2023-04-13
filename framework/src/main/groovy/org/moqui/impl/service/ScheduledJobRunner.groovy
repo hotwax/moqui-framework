@@ -90,166 +90,169 @@ class ScheduledJobRunner implements Runnable {
         // Get ExecutionContext, just for disable authz
         ExecutionContextImpl eci = ecfi.getEci()
         eci.artifactExecution.disableAuthz()
-        EntityFacadeImpl efi = ecfi.entityFacade
+        Collection<EntityFacadeImpl> allEntityFacades = ecfi.getAllEntityFacades()
         ThreadPoolExecutor jobWorkerPool = ecfi.serviceFacade.jobWorkerPool
         try {
-            // make sure no transaction is in place, shouldn't be any so try to commit if there is one
-            if (ecfi.transactionFacade.isTransactionInPlace()) {
-                logger.error("Found transaction in place in ScheduledJobRunner thread ${Thread.currentThread().getName()}, trying to commit")
-                try {
-                    ecfi.transactionFacade.destroyAllInThread()
-                } catch (Exception e) {
-                    logger.error(" Commit of in-place transaction failed for ScheduledJobRunner thread ${Thread.currentThread().getName()}", e)
-                }
-            }
-
-            // look at jobWorkerPool to see how many jobs we can run: (jobQueueMax + poolMax) - (active + queueSize)
-            int jobSlots = jobQueueMax + jobWorkerPool.getMaximumPoolSize()
-            int jobsRunning = jobWorkerPool.getActiveCount() + jobWorkerPool.queue.size()
-            int jobSlotsAvailable = jobSlots - jobsRunning
-            // if we can't handle any more jobs
-            if (jobSlotsAvailable <= 0) {
-                logger.info("ScheduledJobRunner doing nothing, already ${jobsRunning} of ${jobSlots} jobs running")
-            }
-
-            // find scheduled jobs
-            EntityList serviceJobList = efi.find("moqui.service.job.ServiceJob").useCache(false)
-                    .condition("cronExpression", EntityCondition.ComparisonOperator.NOT_EQUAL, null)
-                    .orderBy("priority").orderBy("jobName").list()
-            serviceJobList.filterByDate("fromDate", "thruDate", nowTimestamp)
-            int serviceJobListSize = serviceJobList.size()
-            for (int i = 0; i < serviceJobListSize; i++) {
-                EntityValue serviceJob = (EntityValue) serviceJobList.get(i)
-                String jobName = (String) serviceJob.jobName
-                // a job is ACTIVE if the paused field is null or 'N', so skip for any other value for paused (Y, T, whatever)
-                if (serviceJob.paused != null && !"N".equals(serviceJob.paused)) {
-                    jobsPaused++
-                    continue
-                }
-                if (serviceJob.repeatCount != null) {
-                    long repeatCount = ((Long) serviceJob.repeatCount).longValue()
-                    long runCount = efi.find("moqui.service.job.ServiceJobRun").condition("jobName", jobName).useCache(false).count()
-                    if (runCount >= repeatCount) {
-                        // pause the job and set thruDate for faster future filtering
-                        ecfi.service.sync().name("update", "moqui.service.job.ServiceJob")
-                                .parameters([jobName: jobName, paused:'Y', thruDate:nowTimestamp] as Map<String, Object>)
-                                .disableAuthz().call()
-                        continue
+            // run for each active tenant
+            for (EntityFacadeImpl efi in allEntityFacades) {
+                // make sure no transaction is in place, shouldn't be any so try to commit if there is one
+                if (ecfi.transactionFacade.isTransactionInPlace()) {
+                    logger.error("Found transaction in place in ScheduledJobRunner thread ${Thread.currentThread().getName()}, trying to commit")
+                    try {
+                        ecfi.transactionFacade.destroyAllInThread()
+                    } catch (Exception e) {
+                        logger.error(" Commit of in-place transaction failed for ScheduledJobRunner thread ${Thread.currentThread().getName()}", e)
                     }
                 }
-                jobsActive++
 
-                String jobRunId
-                EntityValue serviceJobRun
-                EntityValue serviceJobRunLock
-                Timestamp lastRunTime
-                // get a lock, see if another instance is running the job
-                // now we need to run in a transaction; note that this is running in a executor service thread, no tx should ever be in place
-                boolean beganTransaction = ecfi.transaction.begin(null)
-                try {
-                    serviceJobRunLock = efi.find("moqui.service.job.ServiceJobRunLock")
-                            .condition("jobName", jobName).forUpdate(true).one()
-                    lastRunTime = (Timestamp) serviceJobRunLock?.lastRunTime
-                    ZonedDateTime lastRunDt = (lastRunTime != (Timestamp) null) ?
-                            ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastRunTime.getTime()), now.getZone()) : null
-                    if (serviceJobRunLock != null && serviceJobRunLock.jobRunId != null && lastRunDt != null) {
-                        // for failure with no lock reset: run recovery, based on expireLockTime (default to 1440 minutes)
-                        Long expireLockTime = (Long) serviceJob.expireLockTime
-                        if (expireLockTime == null) expireLockTime = 1440L
-                        ZonedDateTime lockCheckTime = now.minusMinutes(expireLockTime.intValue())
-                        if (lastRunDt.isBefore(lockCheckTime)) {
-                            // recover failed job without lock reset, run it if schedule says to
-                            logger.warn("Lock expired: found lock for job ${jobName} from ${lastRunDt}, more than ${expireLockTime} minutes old, ignoring lock")
-                            serviceJobRunLock.set("jobRunId", null).update()
-                        } else {
-                            // normal lock, skip this job
-                            logger.info("Lock found for job ${jobName} from ${lastRunDt} run ID ${serviceJobRunLock.jobRunId}, not running")
+                // look at jobWorkerPool to see how many jobs we can run: (jobQueueMax + poolMax) - (active + queueSize)
+                int jobSlots = jobQueueMax + jobWorkerPool.getMaximumPoolSize()
+                int jobsRunning = jobWorkerPool.getActiveCount() + jobWorkerPool.queue.size()
+                int jobSlotsAvailable = jobSlots - jobsRunning
+                // if we can't handle any more jobs
+                if (jobSlotsAvailable <= 0) {
+                    logger.info("ScheduledJobRunner doing nothing, already ${jobsRunning} of ${jobSlots} jobs running")
+                }
+
+                // find scheduled jobs
+                EntityList serviceJobList = efi.find("moqui.service.job.ServiceJob").useCache(false)
+                        .condition("cronExpression", EntityCondition.ComparisonOperator.NOT_EQUAL, null)
+                        .orderBy("priority").orderBy("jobName").list()
+                serviceJobList.filterByDate("fromDate", "thruDate", nowTimestamp)
+                int serviceJobListSize = serviceJobList.size()
+                for (int i = 0; i < serviceJobListSize; i++) {
+                    EntityValue serviceJob = (EntityValue) serviceJobList.get(i)
+                    String jobName = (String) serviceJob.jobName
+                    // a job is ACTIVE if the paused field is null or 'N', so skip for any other value for paused (Y, T, whatever)
+                    if (serviceJob.paused != null && !"N".equals(serviceJob.paused)) {
+                        jobsPaused++
+                        continue
+                    }
+                    if (serviceJob.repeatCount != null) {
+                        long repeatCount = ((Long) serviceJob.repeatCount).longValue()
+                        long runCount = efi.find("moqui.service.job.ServiceJobRun").condition("jobName", jobName).useCache(false).count()
+                        if (runCount >= repeatCount) {
+                            // pause the job and set thruDate for faster future filtering
+                            ecfi.service.sync().name("update", "moqui.service.job.ServiceJob")
+                                    .parameters([jobName: jobName, paused: 'Y', thruDate: nowTimestamp] as Map<String, Object>)
+                                    .disableAuthz().call()
                             continue
                         }
                     }
+                    jobsActive++
 
-                    // calculate time it should have run last
-                    String cronExpression = (String) serviceJob.getNoCheckSimple("cronExpression")
-                    ExecutionTime executionTime = getExecutionTime(cronExpression)
-                    ZonedDateTime lastSchedule = executionTime.lastExecution(now).get()
-                    if (lastSchedule != null && lastRunDt != null) {
-                        // if the time it should have run last is before the time it ran last don't run it
-                        if (lastSchedule.isBefore(lastRunDt)) continue
-                    }
-
-                    // if the last run had an error check the minRetryTime, don't run if hasn't been long enough
-                    EntityValue lastJobRun = efi.find("moqui.service.job.ServiceJobRun").condition("jobName", jobName)
-                            .orderBy("-startTime").limit(1).useCache(false).list().getFirst()
-                    if (lastJobRun != null && "Y".equals(lastJobRun.hasError)) {
-                        Timestamp lastErrorTime = (Timestamp) lastJobRun.endTime ?: (Timestamp) lastJobRun.startTime
-                        if (lastErrorTime != (Timestamp) null) {
-                            ZonedDateTime lastErrorDt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastErrorTime.getTime()), now.getZone())
-                            Long minRetryTime = (Long) serviceJob.minRetryTime ?: 5L
-                            ZonedDateTime retryCheckTime = now.minusMinutes(minRetryTime.intValue())
-                            // if last error time after retry check time don't run the job
-                            if (lastErrorDt.isAfter(retryCheckTime)) {
-                                logger.info("Not retrying job ${jobName} after error, before ${minRetryTime} min retry minutes (error run at ${lastErrorDt})")
+                    String jobRunId
+                    EntityValue serviceJobRun
+                    EntityValue serviceJobRunLock
+                    Timestamp lastRunTime
+                    // get a lock, see if another instance is running the job
+                    // now we need to run in a transaction; note that this is running in a executor service thread, no tx should ever be in place
+                    boolean beganTransaction = ecfi.transaction.begin(null)
+                    try {
+                        serviceJobRunLock = efi.find("moqui.service.job.ServiceJobRunLock")
+                                .condition("jobName", jobName).forUpdate(true).one()
+                        lastRunTime = (Timestamp) serviceJobRunLock?.lastRunTime
+                        ZonedDateTime lastRunDt = (lastRunTime != (Timestamp) null) ?
+                                ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastRunTime.getTime()), now.getZone()) : null
+                        if (serviceJobRunLock != null && serviceJobRunLock.jobRunId != null && lastRunDt != null) {
+                            // for failure with no lock reset: run recovery, based on expireLockTime (default to 1440 minutes)
+                            Long expireLockTime = (Long) serviceJob.expireLockTime
+                            if (expireLockTime == null) expireLockTime = 1440L
+                            ZonedDateTime lockCheckTime = now.minusMinutes(expireLockTime.intValue())
+                            if (lastRunDt.isBefore(lockCheckTime)) {
+                                // recover failed job without lock reset, run it if schedule says to
+                                logger.warn("Lock expired: found lock for job ${jobName} from ${lastRunDt}, more than ${expireLockTime} minutes old, ignoring lock")
+                                serviceJobRunLock.set("jobRunId", null).update()
+                            } else {
+                                // normal lock, skip this job
+                                logger.info("Lock found for job ${jobName} from ${lastRunDt} run ID ${serviceJobRunLock.jobRunId}, not running")
                                 continue
                             }
                         }
-                    }
 
-                    // if no more job slots available continue, don't break because we want to loop through all to get jobsPaused, jobsActive, etc
-                    if (jobSlotsAvailable <= 0) {
-                        jobsReadyNotRun++
+                        // calculate time it should have run last
+                        String cronExpression = (String) serviceJob.getNoCheckSimple("cronExpression")
+                        ExecutionTime executionTime = getExecutionTime(cronExpression)
+                        ZonedDateTime lastSchedule = executionTime.lastExecution(now).get()
+                        if (lastSchedule != null && lastRunDt != null) {
+                            // if the time it should have run last is before the time it ran last don't run it
+                            if (lastSchedule.isBefore(lastRunDt)) continue
+                        }
+
+                        // if the last run had an error check the minRetryTime, don't run if hasn't been long enough
+                        EntityValue lastJobRun = efi.find("moqui.service.job.ServiceJobRun").condition("jobName", jobName)
+                                .orderBy("-startTime").limit(1).useCache(false).list().getFirst()
+                        if (lastJobRun != null && "Y".equals(lastJobRun.hasError)) {
+                            Timestamp lastErrorTime = (Timestamp) lastJobRun.endTime ?: (Timestamp) lastJobRun.startTime
+                            if (lastErrorTime != (Timestamp) null) {
+                                ZonedDateTime lastErrorDt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastErrorTime.getTime()), now.getZone())
+                                Long minRetryTime = (Long) serviceJob.minRetryTime ?: 5L
+                                ZonedDateTime retryCheckTime = now.minusMinutes(minRetryTime.intValue())
+                                // if last error time after retry check time don't run the job
+                                if (lastErrorDt.isAfter(retryCheckTime)) {
+                                    logger.info("Not retrying job ${jobName} after error, before ${minRetryTime} min retry minutes (error run at ${lastErrorDt})")
+                                    continue
+                                }
+                            }
+                        }
+
+                        // if no more job slots available continue, don't break because we want to loop through all to get jobsPaused, jobsActive, etc
+                        if (jobSlotsAvailable <= 0) {
+                            jobsReadyNotRun++
+                            continue
+                        }
+
+                        // create a job run and lock it
+                        serviceJobRun = efi.makeValue("moqui.service.job.ServiceJobRun")
+                                .set("jobName", jobName).setSequencedIdPrimary().create()
+                        jobRunId = (String) serviceJobRun.getNoCheckSimple("jobRunId")
+
+                        if (serviceJobRunLock == null) {
+                            serviceJobRunLock = efi.makeValue("moqui.service.job.ServiceJobRunLock").set("jobName", jobName)
+                                    .set("jobRunId", jobRunId).set("lastRunTime", nowTimestamp).create()
+                        } else {
+                            serviceJobRunLock.set("jobRunId", jobRunId).set("lastRunTime", nowTimestamp).update()
+                        }
+
+                        logger.info("Running job ${jobName} run ${jobRunId} in tenant ${efi.tenantId} (last run ${lastRunTime}, schedule ${lastSchedule})")
+                    } catch (Throwable t) {
+                        String errMsg = "Error getting and checking service job run lock"
+                        ecfi.transaction.rollback(beganTransaction, errMsg, t)
+                        logger.error(errMsg, t)
                         continue
+                    } finally {
+                        ecfi.transaction.commit(beganTransaction)
                     }
 
-                    // create a job run and lock it
-                    serviceJobRun = efi.makeValue("moqui.service.job.ServiceJobRun")
-                            .set("jobName", jobName).setSequencedIdPrimary().create()
-                    jobRunId = (String) serviceJobRun.getNoCheckSimple("jobRunId")
-
-                    if (serviceJobRunLock == null) {
-                        serviceJobRunLock = efi.makeValue("moqui.service.job.ServiceJobRunLock").set("jobName", jobName)
-                                .set("jobRunId", jobRunId).set("lastRunTime", nowTimestamp).create()
-                    } else {
-                        serviceJobRunLock.set("jobRunId", jobRunId).set("lastRunTime", nowTimestamp).update()
+                    jobsRun++
+                    jobSlotsAvailable--
+                    if (jobSlotsAvailable <= 0) {
+                        logger.info("ScheduledJobRunner out of job slots after running ${jobsRun} jobs, ${jobSlots} jobs running, evaluated ${i} of ${serviceJobListSize} ServiceJob records")
                     }
 
-                    logger.info("Running job ${jobName} run ${jobRunId} (last run ${lastRunTime}, schedule ${lastSchedule})")
-                } catch (Throwable t) {
-                    String errMsg = "Error getting and checking service job run lock"
-                    ecfi.transaction.rollback(beganTransaction, errMsg, t)
-                    logger.error(errMsg, t)
-                    continue
-                } finally {
-                    ecfi.transaction.commit(beganTransaction)
-                }
+                    // at this point jobRunId and serviceJobRunLock should not be null
+                    ServiceCallJobImpl serviceCallJob = new ServiceCallJobImpl(jobName, ecfi.serviceFacade)
+                    // use the job run we created
+                    serviceCallJob.withJobRunId(jobRunId)
+                    serviceCallJob.withLastRunTime(lastRunTime)
+                    // clear the lock when finished
+                    serviceCallJob.clearLock()
+                    // always run locally to use service job's worker pool and keep queue of pending jobs in the database
+                    serviceCallJob.localOnly(true)
+                    // run it, will run async
+                    try {
+                        serviceCallJob.run()
+                    } catch (Throwable t) {
+                        logger.error("Error running scheduled job ${jobName}", t)
+                        ecfi.transactionFacade.runUseOrBegin(null, "Error clearing lock and saving error on scheduled job run error", {
+                            serviceJobRunLock.set("jobRunId", null).update()
+                            serviceJobRun.set("hasError", "Y").set("errors", t.toString()).set("startTime", nowTimestamp)
+                                    .set("endTime", nowTimestamp).update()
+                        })
+                    }
 
-                jobsRun++
-                jobSlotsAvailable--
-                if (jobSlotsAvailable <= 0) {
-                    logger.info("ScheduledJobRunner out of job slots after running ${jobsRun} jobs, ${jobSlots} jobs running, evaluated ${i} of ${serviceJobListSize} ServiceJob records")
+                    // end of for loop
                 }
-
-                // at this point jobRunId and serviceJobRunLock should not be null
-                ServiceCallJobImpl serviceCallJob = new ServiceCallJobImpl(jobName, ecfi.serviceFacade)
-                // use the job run we created
-                serviceCallJob.withJobRunId(jobRunId)
-                serviceCallJob.withLastRunTime(lastRunTime)
-                // clear the lock when finished
-                serviceCallJob.clearLock()
-                // always run locally to use service job's worker pool and keep queue of pending jobs in the database
-                serviceCallJob.localOnly(true)
-                // run it, will run async
-                try {
-                    serviceCallJob.run()
-                } catch (Throwable t) {
-                    logger.error("Error running scheduled job ${jobName}", t)
-                    ecfi.transactionFacade.runUseOrBegin(null, "Error clearing lock and saving error on scheduled job run error", {
-                        serviceJobRunLock.set("jobRunId", null).update()
-                        serviceJobRun.set("hasError", "Y").set("errors", t.toString()).set("startTime", nowTimestamp)
-                                .set("endTime", nowTimestamp).update()
-                    })
-                }
-
-                // end of for loop
             }
         } catch (Throwable t) {
             logger.error("Uncaught error in scheduled job runner", t)
@@ -269,7 +272,7 @@ class ScheduledJobRunner implements Runnable {
         int jobsRunning = jobWorkerPool.getActiveCount() + jobWorkerPool.queue.size()
 
         if (jobsRun > 0 || logger.isTraceEnabled()) {
-            String infoStr = "Ran ${jobsRun} Service Jobs starting ${now} - active: ${jobsActive}, paused: ${jobsPaused}; on this server using ${jobsRunning} of ${jobSlots} job slots"
+            String infoStr ="Ran ${jobsRun} Service Jobs starting ${now} (active: ${jobsActive}, paused: ${jobsPaused}, tenants: ${allEntityFacades.size()})"
             if (jobsReadyNotRun > 0) infoStr += ", ${jobsReadyNotRun} jobs ready but not run (insufficient job slots)"
             logger.info(infoStr)
         }

@@ -200,15 +200,20 @@ class TransactionFacadeImpl implements TransactionFacade {
             Thread txThread = null
             ExecutionContextImpl eci = ecfi.getEci()
             Throwable threadThrown = null
-
+            
             try {
                 txThread = Thread.start('RequireNewTx', {
+                    
                     if (threadReuseEci) ecfi.useExecutionContextInThread(eci)
+                    
                     try {
                         if (beginTx) {
                             result = runUseOrBegin(timeout, rollbackMessage, closure)
+                            
                         } else {
+//                            logger.info("---------------"+eci.tenantId)
                             result = closure.call()
+//                            logger.info("================="+result.toString())
                         }
                     } catch (Throwable t) {
                         threadThrown = t
@@ -670,17 +675,17 @@ class TransactionFacadeImpl implements TransactionFacade {
         }
     }
 
-    Connection getTxConnection(String groupName) {
+    Connection getTxConnection(String tenantId, String groupName) {
         if (!useConnectionStash) return null
 
-        String conKey = groupName
+        String conKey = tenantId.concat(groupName)
         TxStackInfo txStackInfo = getTxStackInfo()
         ConnectionWrapper con = (ConnectionWrapper) txStackInfo.txConByGroup.get(conKey)
         if (con == null) return null
 
         if (con.isClosed()) {
             txStackInfo.txConByGroup.remove(conKey)
-            logger.info("Stashed connection closed elsewhere for group ${groupName}: ${con.toString()}")
+            logger.info("Stashed connection closed elsewhere for tenant ${tenantId} group ${groupName}: ${con.toString()}")
             return null
         }
         if (!isTransactionActive()) {
@@ -691,21 +696,21 @@ class TransactionFacadeImpl implements TransactionFacade {
         }
         return con
     }
-    Connection stashTxConnection(String groupName, Connection con) {
+    Connection stashTxConnection(String tenantId, String groupName, Connection con) {
         if (!useConnectionStash || !isTransactionActive()) return con
 
         TxStackInfo txStackInfo = getTxStackInfo()
         // if transactionBeginStartTime is null we didn't begin the transaction, so can't count on commit/rollback through this
         if (txStackInfo.transactionBeginStartTime == null) return con
 
-        String conKey = groupName
+        String conKey = tenantId.concat(groupName)
         ConnectionWrapper existing = (ConnectionWrapper) txStackInfo.txConByGroup.get(conKey)
         try {
             if (existing != null && !existing.isClosed()) existing.closeInternal()
         } catch (Throwable t) {
-            logger.error("Error closing previously stashed connection for group ${groupName}: ${existing.toString()}", t)
+            logger.error("Error closing previously stashed connection for tenant ${tenantId} group ${groupName}: ${existing.toString()}", t)
         }
-        ConnectionWrapper newCw = new ConnectionWrapper(con, this, groupName)
+        ConnectionWrapper newCw = new ConnectionWrapper(con, this, tenantId, groupName)
         txStackInfo.txConByGroup.put(conKey, newCw)
         return newCw
     }

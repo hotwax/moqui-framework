@@ -47,7 +47,7 @@ class EntityDataFeed {
 
     EntityDataFeed(EntityFacadeImpl efi) {
         this.efi = efi
-        dataFeedEntityInfo = efi.ecfi.cacheFacade.getLocalCache("entity.data.feed.info")
+        dataFeedEntityInfo = efi.ecfi.cacheFacade.getLocalCache("entity.data.feed.info", efi.tenantId)
     }
 
     EntityFacadeImpl getEfi() { return efi }
@@ -283,7 +283,7 @@ class EntityDataFeed {
         // NOTE: no other good way to limit this, cache entries may expire individually so we can't check to see if any are missing without a full reload
         if (dataFeedEntityInfo.size() > 0 && System.currentTimeMillis() < (lastRebuildTime + 5000)) return
 
-        // logger.info("Building entity.data.feed.info cache")
+        // logger.info("Building entity.data.feed.info cache in tenant ${efi.tenantId}")
         long startTime = System.currentTimeMillis()
 
         // rebuild from the DB for this and other entities, ie have to do it for all DataFeeds and
@@ -325,10 +325,10 @@ class EntityDataFeed {
 
         Set<String> entityNameSet = localInfo.keySet()
         if (entitiesWithDataFeed == null) {
-            logger.info("Built entity.data.feed.info cache in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities")
-            if (logger.isTraceEnabled()) logger.trace("Built entity.data.feed.info cache for in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities: ${entityNameSet}")
+            logger.info("Built entity.data.feed.info cache for tenant ${efi.tenantId} in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities")
+            if (logger.isTraceEnabled()) logger.trace("Built entity.data.feed.info cache for tenant ${efi.tenantId} in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities: ${entityNameSet}")
         } else {
-            logger.info("Rebuilt entity.data.feed.info cache in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities")
+            logger.info("Rebuilt entity.data.feed.info cache for tenant ${efi.tenantId} in ${System.currentTimeMillis() - startTime}ms, entries for ${entityNameSet.size()} entities")
         }
         dataFeedEntityInfo.putAll(localInfo)
         entitiesWithDataFeed = entityNameSet

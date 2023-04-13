@@ -109,6 +109,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     public final Map<Long, ExecutionContextImpl> activeContextMap = new HashMap<>()
     protected final LinkedHashMap<String, ToolFactory> toolFactoryMap = new LinkedHashMap<>()
 
+    protected final Map<String, EntityFacadeImpl> entityFacadeByTenantMap = new HashMap<>()
     protected final Map<String, WebappInfo> webappInfoMap = new HashMap<>()
     protected final List<NotificationMessageListener> registeredNotificationMessageListeners = []
 
@@ -120,7 +121,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     protected long hitBinLengthMillis = 900000 // 15 minute default
     private final EnumMap<ArtifactType, Boolean> artifactPersistHitByTypeEnum = new EnumMap<ArtifactType, Boolean>(ArtifactType.class)
     private final EnumMap<ArtifactType, Boolean> artifactPersistBinByTypeEnum = new EnumMap<ArtifactType, Boolean>(ArtifactType.class)
-    final ConcurrentLinkedQueue<ArtifactHitInfo> deferredHitInfoQueue = new ConcurrentLinkedQueue<ArtifactHitInfo>()
+    final Map<String,ConcurrentLinkedQueue<ArtifactHitInfo>> deferredHitInfoQueueByTenant = [DEFAULT:new ConcurrentLinkedQueue<ArtifactHitInfo>()]
 
     /** The SecurityManager for Apache Shiro */
     protected org.apache.shiro.mgt.SecurityManager internalSecurityManager
@@ -140,10 +141,10 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     @SuppressWarnings("GrFinalVariableAccess") public final LoggerFacadeImpl loggerFacade
     @SuppressWarnings("GrFinalVariableAccess") public final ResourceFacadeImpl resourceFacade
     @SuppressWarnings("GrFinalVariableAccess") public final TransactionFacadeImpl transactionFacade
-    @SuppressWarnings("GrFinalVariableAccess") public final EntityFacadeImpl entityFacade
     @SuppressWarnings("GrFinalVariableAccess") public final ElasticFacadeImpl elasticFacade
     @SuppressWarnings("GrFinalVariableAccess") public final ServiceFacadeImpl serviceFacade
     @SuppressWarnings("GrFinalVariableAccess") public final ScreenFacadeImpl screenFacade
+    @SuppressWarnings("GrFinalVariableAccess") public final EntityFacadeImpl defaultEntityFacade
 
     /** The main worker pool for services, running async closures and runnables, etc */
     @SuppressWarnings("GrFinalVariableAccess") public final ThreadPoolExecutor workerPool
@@ -227,8 +228,8 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
 
         transactionFacade = new TransactionFacadeImpl(this)
         logger.info("Transaction Facade initialized")
-        entityFacade = new EntityFacadeImpl(this)
-        logger.info("Entity Facade initialized")
+        // always init the EntityFacade for tenantId DEFAULT
+        defaultEntityFacade = initEntityFacade("DEFAULT")
         serviceFacade = new ServiceFacadeImpl(this)
         logger.info("Service Facade initialized")
         screenFacade = new ScreenFacadeImpl(this)
@@ -287,8 +288,8 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
 
         transactionFacade = new TransactionFacadeImpl(this)
         logger.info("Transaction Facade initialized")
-        entityFacade = new EntityFacadeImpl(this)
-        logger.info("Entity Facade initialized")
+        // always init the EntityFacade for tenantId DEFAULT
+        defaultEntityFacade = initEntityFacade("DEFAULT")
         serviceFacade = new ServiceFacadeImpl(this)
         logger.info("Service Facade initialized")
         screenFacade = new ScreenFacadeImpl(this)
@@ -904,7 +905,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         if (notificationMessageTopic != null) {
             // send it to the topic, this will call notifyNotificationMessageListeners(nmi)
             notificationMessageTopic.publish(nmi)
-            // logger.warn("Sent nmi to distributed topic, topic=${nmi.topic}")
+            // logger.warn("Sent nmi to distributed topic, topic=${nmi.topic}, tenant=${nmi.tenantId}")
         } else {
             // run it locally
             notifyNotificationMessageListeners(nmi)
@@ -912,8 +913,12 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     }
     /** This is called when message received from topic (possibly distributed) */
     void notifyNotificationMessageListeners(NotificationMessageImpl nmi) {
+        if (nmi.tenantId == null) {
+            logger.warn("Received NotificationMessageImpl message on topic ${nmi.topic} with null tenantId, ignoring")
+            return
+        }
         // process notifications in the worker thread pool
-        ExecutionContextImpl.ThreadPoolRunnable runnable = new ExecutionContextImpl.ThreadPoolRunnable(this, {
+        ExecutionContextImpl.ThreadPoolRunnable runnable = new ExecutionContextImpl.ThreadPoolRunnable(this, nmi.tenantId, {
             int nmlSize = registeredNotificationMessageListeners.size()
             for (int i = 0; i < nmlSize; i++) {
                 NotificationMessageListener nml = (NotificationMessageListener) registeredNotificationMessageListeners.get(i)
@@ -968,6 +973,33 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         MNode loginKeyNode = confXmlRoot.first("user-facade").first("login-key")
         return (loginKeyNode.attribute("expire-hours") ?: "144") as float
     }
+
+    // ========== Getters ==========
+
+    CacheFacadeImpl getCacheFacade() { return this.cacheFacade }
+
+    Collection<EntityFacadeImpl> getAllEntityFacades() { entityFacadeByTenantMap.values() }
+    EntityFacadeImpl getEntityFacade() { return getEci().getEntityFacade() }
+    EntityFacadeImpl getEntityFacade(@Nonnull String tenantId) {
+//        logger.info("Called get entity facade ------------------------------------- 5")
+        EntityFacadeImpl efi = (EntityFacadeImpl) entityFacadeByTenantMap.get(tenantId)
+//        logger.info("Called get entity facade ------------------------------------- 6")
+        if (efi == null) efi = initEntityFacade(tenantId)
+
+        return efi
+    }
+    synchronized EntityFacadeImpl initEntityFacade(String tenantId) {
+        logger.info("init entity facade ------------------------------------- 7")
+        EntityFacadeImpl efi = this.entityFacadeByTenantMap.get(tenantId)
+        if (efi != null) return efi
+
+        efi = new EntityFacadeImpl(this, tenantId)
+        logger.info("init entity facade ------------------------------------- ecfi8")
+        this.entityFacadeByTenantMap.put(tenantId, efi)
+        logger.info("Entity Facade for tenant ${tenantId} initialized")
+        return efi
+    }
+
 
     // ====================================================
     // ========== Main Interface Implementations ==========
@@ -1025,9 +1057,11 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     @Override @Nonnull L10nFacade getL10n() { getEci().l10nFacade }
     @Override @Nonnull ResourceFacade getResource() { resourceFacade }
     @Override @Nonnull LoggerFacade getLogger() { loggerFacade }
-    @Override @Nonnull CacheFacade getCache() { cacheFacade }
+    @Override @Nonnull CacheFacade getCache() { this.cacheFacade }
     @Override @Nonnull TransactionFacade getTransaction() { transactionFacade }
-    @Override @Nonnull EntityFacade getEntity() { entityFacade }
+    @Override @Nonnull EntityFacade getEntity() { getEci().getEntity() }
+    @Override
+    EntityFacade getEntity(@Nonnull String tenantId) { getEntityFacade(tenantId) }
     @Override @Nonnull ElasticFacade getElastic() { elasticFacade }
     @Override @Nonnull ServiceFacade getService() { serviceFacade }
     @Override @Nonnull ScreenFacade getScreen() { screenFacade }
@@ -1417,7 +1451,8 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     protected final Set<String> entitiesToSkipHitCount = new HashSet([
             'moqui.server.ArtifactHit', 'create#moqui.server.ArtifactHit',
             'moqui.server.ArtifactHitBin', 'create#moqui.server.ArtifactHitBin',
-            'moqui.entity.SequenceValueItem', 'moqui.security.UserAccount',
+            'moqui.entity.SequenceValueItem', 'moqui.security.UserAccount', 'moqui.tenant.Tenant',
+            'moqui.tenant.TenantDataSource', 'moqui.tenant.TenantDataSourceXaProp',
             'moqui.entity.document.DataDocument', 'moqui.entity.document.DataDocumentField',
             'moqui.entity.document.DataDocumentCondition', 'moqui.entity.feed.DataFeedAndDocument',
             'moqui.entity.view.DbViewEntity', 'moqui.entity.view.DbViewEntityMember',
@@ -1466,8 +1501,22 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
             ExecutionContextImpl eci = getEci()
             ArtifactHitInfo ahi = new ArtifactHitInfo(eci, isSlowHit, artifactTypeEnum, artifactSubType, artifactName,
                     startTime, runningTimeMillis, parameters, outputSize)
-            deferredHitInfoQueue.add(ahi)
+            getDeferredHitInfoQueue(eci.tenantId).add(ahi)
         }
+    }
+
+    ConcurrentLinkedQueue<ArtifactHitInfo> getDeferredHitInfoQueue(String tenantId) {
+        ConcurrentLinkedQueue<ArtifactHitInfo> queue = deferredHitInfoQueueByTenant.get(tenantId)
+        if (queue == null) {
+            synchronized (deferredHitInfoQueueByTenant) {
+                queue = deferredHitInfoQueueByTenant.get(tenantId)
+                if (queue == null) {
+                    queue = new ConcurrentLinkedQueue<ArtifactHitInfo>()
+                    deferredHitInfoQueueByTenant.put(tenantId, queue)
+                }
+            }
+        }
+        return queue
     }
 
     static class DeferredHitInfoFlush implements Runnable {
@@ -1479,19 +1528,20 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
             ExecutionContextImpl eci = ecfi.getEci()
             eci.artifactExecutionFacade.disableAuthz()
             try {
-                try {
-                    ConcurrentLinkedQueue<ArtifactHitInfo> queue = ecfi.deferredHitInfoQueue
-                    // split into maxCreates chunks, repeat based on initial size (may be added to while running)
-                    int remainingCreates = queue.size()
-                    // if (remainingCreates > maxCreates) logger.warn("Deferred ArtifactHit create queue size ${remainingCreates} is greater than max creates per chunk ${maxCreates}")
-                    // logger.info("Flushing ArtifactHit queue, size " + queue.size())
-                    while (remainingCreates > 0) {
-                        flushQueue(queue)
-                        remainingCreates -= maxCreates
-                        // logger.info("Flush ArtifactHit queue pass complete, queue size ${queue.size()} remainingCreates ${remainingCreates}")
+                for (String tenantId in ecfi.deferredHitInfoQueueByTenant.keySet()) {
+                    try {
+                        ConcurrentLinkedQueue<ArtifactHitInfo> queue = ecfi.deferredHitInfoQueueByTenant.get(tenantId)
+                        if (queue == null) continue
+                        // split into maxCreates chunks, repeat based on initial size (may be added to while running)
+                        int remainingCreates = queue.size()
+                        if (remainingCreates > maxCreates) logger.warn("Deferred ArtifactHit create queue size ${remainingCreates} is greater than max creates per chunk ${maxCreates}")
+                        while (remainingCreates > 0) {
+                            flushQueue(tenantId, queue)
+                            remainingCreates -= maxCreates
+                        }
+                    } catch (Throwable t) {
+                        logger.error("Error saving ArtifactHits in tenant ${tenantId}", t)
                     }
-                } catch (Throwable t) {
-                    logger.error("Error saving ArtifactHits", t)
                 }
             } finally {
                 // no need, we're destroying the eci: if (!authzDisabled) eci.artifactExecution.enableAuthz()
@@ -1499,7 +1549,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
             }
         }
 
-        void flushQueue(ConcurrentLinkedQueue<ArtifactHitInfo> queue) {
+        void flushQueue(String tenantId, ConcurrentLinkedQueue<ArtifactHitInfo> queue) {
             ExecutionContextFactoryImpl localEcfi = ecfi
             ArrayList<ArtifactHitInfo> createList = new ArrayList<>(maxCreates)
             int createCount = 0
@@ -1515,7 +1565,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
                     int createListSize = createList.size()
                     if (createListSize == 0) break
                     long startTime = System.currentTimeMillis()
-                    ecfi.transactionFacade.runUseOrBegin(60, "Error saving ArtifactHits", {
+                    ecfi.transactionFacade.runUseOrBegin(60, "Error saving ArtifactHits in tenant ${tenantId}", {
                         List<EntityValue> evList = new ArrayList<>(createListSize)
                         for (int i = 0; i < createListSize; i++) {
                             ArtifactHitInfo ahi = (ArtifactHitInfo) createList.get(i)
@@ -1531,7 +1581,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
                     if (isTraceEnabled) logger.trace("Created ${createListSize} ArtifactHit records in ${System.currentTimeMillis() - startTime}ms")
                     break
                 } catch (Throwable t) {
-                    logger.error("Error saving ArtifactHits, retrying (${retryCount})", t)
+                    logger.error("Error saving ArtifactHits in tenant ${tenantId}, retrying (${retryCount})", t)
                     retryCount--
                 }
             }

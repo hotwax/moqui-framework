@@ -57,6 +57,7 @@ class EntityDbMeta {
     }
 
     boolean checkTableRuntime(EntityDefinition ed) {
+        
         EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo
         // most common case: not view entity and already checked
         boolean alreadyChecked = entityTablesChecked.containsKey(entityInfo.fullEntityName)
@@ -64,6 +65,8 @@ class EntityDbMeta {
 
         String groupName = entityInfo.groupName
         Boolean runtimeAddMissing = (Boolean) runtimeAddMissingMap.get(groupName)
+        logger.info("+++++++========== checkTableRuntime value runtime add missing group name  = "+groupName)
+        logger.info("+++++++========== checkTableRuntime value runtime add missing  = "+runtimeAddMissing)
         if (runtimeAddMissing == null) {
             MNode datasourceNode = efi.getDatasourceNode(groupName)
             MNode dbNode = efi.getDatabaseNode(groupName)
@@ -551,7 +554,7 @@ class EntityDbMeta {
 
         logger.info("Creating table for ${ed.getFullEntityName()} pks: ${ed.getPkFieldNames()}")
         if (logger.traceEnabled) logger.trace("Create Table with SQL: " + sql.toString())
-
+        logger.info("=================== SQL = "+sql.toString()+"===================")
         runSqlUpdate(sql, groupName, sharedCon)
         if (logger.infoEnabled) logger.info("Created table ${ed.getFullTableName()} for entity ${ed.getFullEntityName()} in group ${groupName}")
     }
@@ -1204,6 +1207,10 @@ class EntityDbMeta {
             sqlLock.unlock()
         }
         return records
+    }
+//Pass to overloaded with shared connection null ny default 
+    int runSqlUpdate(CharSequence sql, String groupName) {
+        runSqlUpdate(sql,groupName,null)
     }
 
     /* ================= */

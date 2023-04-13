@@ -417,7 +417,7 @@ class WebFacadeImpl implements WebFacade {
         if (savedParameters) cs.push(savedParameters)
         if (multiPartParameters) cs.push(multiPartParameters)
         if (jsonParameters) cs.push(jsonParameters)
-
+logger.info("+++++++++++++++ tenant id from json params "+jsonParameters.get("tenant_id")+"++++++++++++++++++++++++++++++++++")
         Map<String, Object> reqParmMap = WebUtilities.simplifyRequestParameters(request, true)
         if (reqParmMap.size() > 0) cs.push(reqParmMap)
 
@@ -1039,7 +1039,6 @@ class WebFacadeImpl implements WebFacade {
                 logger.warn((String) "General error in Service REST API: " + errorsString)
                 sendJsonError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, errorsString, null)
             }
-            return
         }
 
         // check for parsing error, send a 400 response

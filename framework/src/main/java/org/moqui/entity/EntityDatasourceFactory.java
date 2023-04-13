@@ -18,7 +18,7 @@ import javax.sql.DataSource;
 import java.util.List;
 
 public interface EntityDatasourceFactory {
-    EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode);
+    EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode, String tenantId);
     void destroy();
     boolean checkTableExists(String entityName);
     boolean checkAndAddTable(String entityName);

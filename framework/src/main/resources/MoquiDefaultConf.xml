@@ -26,6 +26,14 @@
     <default-property name="webapp_require_session_token" value="true"/>
     <default-property name="webapp_upload_executable_allow" value="false"/>
 
+    <default-property name="ds_transactional_user" value="sa"/>
+    <default-property name="ds_transactional_password" value="sa"/>
+    <default-property name="ds_transactional_url" value="jdbc:h2:${moqui_runtime}/db/h2/MoquiDEFAULT;lock_timeout=30000"/>
+
+<!--    <default-property name="ds_transactional_user" value="root"/>-->
+<!--    <default-property name="ds_transactional_password" value="123456"/>-->
+<!--    <default-property name="ds_transactional_url" value="jdbc:mysql://localhost:3306/tenant_common"/>-->
+
     <!--
         While there is no default value for webapp_client_ip_header, embedded Jetty looks at Forwarded and
         X-Forwarded-For headers via ForwardedRequestCustomizer (see MoquiStart.java); this is necessary so that
@@ -52,11 +60,29 @@
     <default-property name="entity_ds_password" value="sa"/>
     <default-property name="entity_ds_crypt_pass" value="MoquiDefaultPassword:CHANGEME"/>
     <default-property name="entity_ds_crypt_pass_old" value="MoquiDefaultPassword:CHANGEME"/>
-    <default-property name="entity_add_missing_runtime" value="false"/>
+    <default-property name="entity_add_missing_runtime" value="true"/>
     <default-property name="entity_add_missing_startup" value="true"/>
     <default-property name="entity_lock_track" value="false"/>
     <default-property name="entity_statement_timeout" value="false"/>
     <default-property name="entity_empty_db_load" value="seed,seed-initial,install"/>
+
+<!--     Properties for the primary (transactional group) datasource -->
+<!--    <default-property name="entity_ds_db_conf" value="mysql8"/>-->
+<!--    <default-property name="entity_ds_host" value="127.0.0.1"/>-->
+<!--    <default-property name="entity_ds_port" value="3306"/>-->
+<!--    <default-property name="entity_ds_database" value="moqui"/>-->
+<!--    <default-property name="entity_ds_user" value="moqui"/>-->
+<!--    <default-property name="entity_ds_url" value="jdbc:mysql://localhost:3306/moqui"/>-->
+<!--    <default-property name="entity_ds_password" value="moqui"/>-->
+<!--    <default-property name="entity_empty_db_load" value="seed,seed-initial,install"/>-->
+    
+<!--    <default-property name="entity_ds_db_conf" value="mysql8"/>-->
+<!--    <default-property name="entity_ds_host" value="127.0.0.1"/>-->
+<!--    <default-property name="entity_ds_database" value="moqui"/>-->
+<!--    <default-property name="entity_ds_user" value="moqui"/>-->
+<!--    <default-property name="entity_ds_password" value="moqui"/>-->
+<!--    <default-property name="entity_ds_url" value="jdbc:mysql://localhost:3306/moqui"/>-->
+    
 
     <!-- Properties for a database clone; note that without overriding the transactional#clone1 datasource the default works only
         with MySQL and Postgres because of different properties on XADataSource classes of other JDBC drivers -->
@@ -124,34 +150,38 @@
         <!-- this is info for each entity for real-time push DataFeeds; expires every 15 min to get DataFeed and DataDocument updates -->
         <cache name="entity.data.feed.info" expire-time-live="900" value-type="ArrayList"/>
 
-        <cache name="service.location" value-type="org.moqui.impl.service.ServiceDefinition"/>
-        <cache name="service.rest.api" value-type="org.moqui.impl.service.RestApi$ResourceNode"/>
-        <cache name="kie.component.releaseId" value-type="org.kie.api.builder.ReleaseId"/>
-        <cache name="kie.session.component" value-type="String"/>
+        <cache name="service.location" tenants-share="true" value-type="org.moqui.impl.service.ServiceDefinition"/>
+        <cache name="service.rest.api" tenants-share="true" value-type="org.moqui.impl.service.RestApi$ResourceNode"/>
+        <cache name="kie.component.releaseId" tenants-share="true" value-type="org.kie.api.builder.ReleaseId"/>
+        <cache name="kie.session.component" tenants-share="true" value-type="String"/>
 
-        <cache name="screen.location" value-type="org.moqui.impl.screen.ScreenDefinition"/>
-        <cache name="screen.location.perm" value-type="org.moqui.impl.screen.ScreenDefinition"/>
-        <cache name="screen.url" value-type="org.moqui.impl.screen.ScreenUrlInfo"/>
-        <cache name="screen.info" value-type="List"/>
-        <cache name="screen.info.ref.rev" value-type="Set"/>
-        <cache name="screen.template.mode" value-type="freemarker.template.Template"/>
-        <cache name="screen.template.location" value-type="freemarker.template.Template"/>
-        <cache name="widget.template.location" value-type="MNode"/>
-        <cache name="screen.find.path" value-type="ArrayList"/>
-        <cache name="screen.form.db.node" value-type="MNode"/>
+        <!-- TODO: Potential issue for multi-tenant where DbForm*, SubscreenItem, etc comes from wrong tenant...
+            would need to change ScreenFacadeImpl to get cache per tenant too, maybe even init ScreenFacadeImpl under ECI instead of ECFI (would be slower) -->
+        <cache name="screen.location" tenants-share="true" value-type="org.moqui.impl.screen.ScreenDefinition"/>
+        <cache name="screen.location.perm" tenants-share="true" value-type="org.moqui.impl.screen.ScreenDefinition"/>
+        <cache name="screen.url" tenants-share="true" value-type="org.moqui.impl.screen.ScreenUrlInfo"/>
+        <cache name="screen.info" tenants-share="true" value-type="List"/>
+        <cache name="screen.info.ref.rev" tenants-share="true" value-type="Set"/>
+        <cache name="screen.template.mode" tenants-share="true" value-type="freemarker.template.Template"/>
+        <cache name="screen.template.location" tenants-share="true" value-type="freemarker.template.Template"/>
+        <cache name="widget.template.location" tenants-share="true" value-type="MNode"/>
+        <cache name="screen.find.path" tenants-share="true" value-type="ArrayList"/>
+        <cache name="screen.form.db.node" tenants-share="true" value-type="MNode"/>
 
-        <cache name="resource.xml-actions.location" value-type="org.moqui.impl.actions.XmlAction"/>
-        <cache name="resource.groovy.location" value-type="java.lang.Class"/>
-        <cache name="resource.javascript.location" value-type="java.lang.Class"/>
+        <!-- TODO: Potential issue for multi-tenant where DbResource, etc comes from wrong tenant...
+            would need to change ResourceFacadeImpl to get cache per tenant too, maybe even init ResourceFacadeImpl under ECI instead of ECFI (would be slower) -->
+        <cache name="resource.xml-actions.location" tenants-share="true" value-type="org.moqui.impl.actions.XmlAction"/>
+        <cache name="resource.groovy.location" tenants-share="true" value-type="java.lang.Class"/>
+        <cache name="resource.javascript.location" tenants-share="true" value-type="java.lang.Class"/>
 
         <!-- These caches must be local caches (use additional methods on MCache not in javax.cache.Cache) -->
-        <cache name="resource.ftl.location" value-type="freemarker.template.Template" type="local" max-elements="10000"/>
-        <cache name="resource.gstring.location" value-type="groovy.text.Template" type="local" max-elements="10000"/>
-        <cache name="resource.wiki.location" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
-        <cache name="resource.markdown.location" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
-        <cache name="resource.text.location" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
+        <cache name="resource.ftl.location" tenants-share="true" value-type="freemarker.template.Template" type="local" max-elements="10000"/>
+        <cache name="resource.gstring.location" tenants-share="true" value-type="groovy.text.Template" type="local" max-elements="10000"/>
+        <cache name="resource.wiki.location" tenants-share="true" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
+        <cache name="resource.markdown.location" tenants-share="true" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
+        <cache name="resource.text.location" tenants-share="true" value-type="String" type="local" max-elements="10000" expire-time-live="3600"/>
 
-        <cache name="resource.reference.location" value-type="org.moqui.resource.ResourceReference"/>
+        <cache name="resource.reference.location" tenants-share="true" value-type="org.moqui.resource.ResourceReference"/>
 
         <cache name="l10n.message" expire-time-live="3600" max-elements="50000" value-type="String"/>
 
@@ -409,6 +439,7 @@
         <service-file location="classpath://service/org/moqui/impl/ServerServices.xml"/>
         <service-file location="classpath://service/org/moqui/impl/ServiceServices.xml"/>
         <service-file location="classpath://service/org/moqui/impl/SystemMessageServices.xml"/>
+        <service-file location="classpath://service/org/moqui/impl/TenantServices.xml"/>
         <service-file location="classpath://service/org/moqui/impl/UserServices.xml"/>
         <service-file location="classpath://service/org/moqui/impl/WikiServices.xml"/>
         <service-file location="classpath://service/org/moqui/search/SearchServices.xml"/>
@@ -460,11 +491,23 @@
 
             Good numbers for a decent sized server are 100 servlet container (Jetty) threads, 16 worker threads, plus a
             few extra so 120 connections in the main pool.
+            
+            For multi-tenant the tenantcommon pool can be much smaller. The pool sizes for multi-tenant are generally
+            much more complex as there is currently one connection pool per tenant and group (making it more important
+            to use just one datasource). In the future this may change to support higher numbers of tenants under a load.
         -->
-        <datasource group-name="transactional" database-conf-name="${entity_ds_db_conf}" schema-name="${entity_ds_schema}"
-                runtime-add-missing="${entity_add_missing_runtime}" startup-add-missing="${entity_add_missing_startup}">
-            <!-- by default no inline-jdbc or jndi-jdbc elements, use default from database conf -->
+        <datasource group-name="transactional" database-conf-name="${entity_ds_db_conf}" schema-name="${entity_ds_schema}" 
+                    runtime-add-missing="${entity_add_missing_runtime}" startup-add-missing="${entity_add_missing_startup}">
+            <inline-jdbc><xa-properties user="${ds_transactional_user}" password="${ds_transactional_password}" pinGlobalTxToPhysicalConnection="true"
+                                        url="${ds_transactional_url}" autoReconnectForPools="true"
+                                        useUnicode="true" encoding="UTF-8"/></inline-jdbc>
         </datasource>
+<!--        <datasource group-name="transactional" database-conf-name="${entity_ds_db_conf}" schema-name="${entity_ds_schema}"-->
+<!--                runtime-add-missing="${entity_add_missing_runtime}" startup-add-missing="${entity_add_missing_startup}">-->
+<!--            <inline-jdbc><xa-properties url="${ds_transactional_url}" user="${ds_transactional_user}"-->
+<!--                                        password="${ds_transactional_password}"/></inline-jdbc>-->
+<!--             by default no inline-jdbc or jndi-jdbc elements, use default from database conf -->
+<!--        </datasource>-->
 
         <!-- H2 clone for testing, use same URL as just for testing
         <datasource group-name="transactional#clone1" database-conf-name="h2" schema-name=""
@@ -494,6 +537,13 @@
             <inline-other index-prefix="logging-" cluster-name="default"/>
         </datasource>
 
+        <!-- The tenantcommon group can also in the same DB, but MUST have a separate definition for multi-tenant to work -->
+        <datasource group-name="tenantcommon" database-conf-name="${entity_ds_db_conf}" schema-name="">
+            <inline-jdbc><xa-properties url="${ds_transactional_url}" user="${ds_transactional_user}"
+                                        password="${ds_transactional_password}"/></inline-jdbc>
+        </datasource>
+
+
         <!-- The nontransactional group is in the transactional db by default. To use OrientDB use the datasource below.
             NOTE: startup-add-missing=true is required because OrientDB doesn't allow class create in a TX
             NOTE: adding more entities to the nontransactional group is a work in progress, this will not currently run,
@@ -521,6 +571,7 @@
         <load-entity location="classpath://entity/SecurityEntities.xml"/>
         <load-entity location="classpath://entity/ServerEntities.xml"/>
         <load-entity location="classpath://entity/ServiceEntities.xml"/>
+        <load-entity location="classpath://entity/TenantEntities.xml"/>
         <load-entity location="classpath://entity/TestEntities.xml"/>
         <!-- in framework/data -->
         <load-data location="classpath://data/CommonL10nData.xml"/>
@@ -529,6 +580,7 @@
         <load-data location="classpath://data/GeoCountryData.xml"/>
         <load-data location="classpath://data/SecurityTypeData.xml"/>
         <load-data location="classpath://data/UnitData.xml"/>
+        <load-data location="classpath://data/TenantDefaultData.xml"/>
         <load-data location="classpath://data/MoquiSetupData.xml"/>
     </entity-facade>
     <database-list>
@@ -661,12 +713,14 @@
 
             <database-type type="binary-very-long" sql-type="OBJECT" sql-type-alias="OTHER"/>
         </database>
+        
         <!--
         * MS SQL Server:
         <datasource group-name="transactional" database-conf-name="mssql" schema-name="">
             <inline-jdbc><xa-properties user="moqui" password="moqui" serverName="localhost" portNumber="1433"
                     databaseName="moqui" selectMethod="Cursor"/></inline-jdbc>
         </datasource>
+        
         <datasource group-name="transactional" database-conf-name="mssql" schema-name="">
             <inline-jdbc jdbc-uri="jdbc:sqlserver://localhost:1433;databaseName=moqui;SelectMethod=Cursor" jdbc-username="moqui" jdbc-password="moqui"/>
         </datasource>
@@ -704,18 +758,18 @@
                     databaseName="${entity_ds_database}" user="${entity_ds_user}" password="${entity_ds_password}"
                     selectMethod="Cursor"/></inline-jdbc>
         </database>
-        <!--
-        * MySQL (similar for Percona Server, MariaDB, AWS Aurora):
-        <datasource group-name="transactional" database-conf-name="mysql" schema-name="">
-            <inline-jdbc><xa-properties user="moqui" password="moqui" pinGlobalTxToPhysicalConnection="true"
-                    serverName="127.0.0.1" port="3306" databaseName="moqui" autoReconnectForPools="true"
-                    useUnicode="true" encoding="UTF-8"/></inline-jdbc>
-        </datasource>
-        <datasource group-name="transactional" database-conf-name="mysql" schema-name="">
-            <inline-jdbc jdbc-uri="jdbc:mysql://127.0.0.1:3306/moqui?autoReconnect=true&amp;useUnicode=true&amp;characterEncoding=UTF-8"
-                    jdbc-username="moqui" jdbc-password="moqui"/>
-        </datasource>
-        -->
+        
+<!--        * MySQL (similar for Percona Server, MariaDB, AWS Aurora):-->
+<!--        <datasource group-name="transactional" database-conf-name="${entity_ds_db_conf}" schema-name="{entity_ds_schema}">-->
+<!--            <inline-jdbc><xa-properties user="${ds_transactional_user}" password="${ds_transactional_password}" pinGlobalTxToPhysicalConnection="true" -->
+<!--                                        url="${ds_transactional_url}" autoReconnectForPools="true"-->
+<!--                    useUnicode="true" encoding="UTF-8"/></inline-jdbc>-->
+<!--        </datasource>-->
+<!--        <datasource group-name="transactional" database-conf-name="mysql" schema-name="">-->
+<!--            <inline-jdbc jdbc-uri="jdbc:mysql://127.0.0.1:3306/moqui?autoReconnect=true&amp;useUnicode=true&amp;characterEncoding=UTF-8"-->
+<!--                    jdbc-username="moqui" jdbc-password="moqui"/>-->
+<!--        </datasource>-->
+        
         <database name="mysql" join-style="ansi-no-parenthesis" offset-style="limit" never-nulls="true"
                 table-engine="InnoDB" character-set="utf8" collate="utf8_general_ci" fk-style="name_fk"
                 constraint-name-clip-length="60"
@@ -750,11 +804,12 @@
                     pinGlobalTxToPhysicalConnection="true" autoReconnectForPools="true" useUnicode="true" encoding="UTF-8" useCursorFetch="true"
                     databaseName="${entity_ds_database}" user="${entity_ds_user}" password="${entity_ds_password}"/></inline-jdbc>
         </database>
+
         <database name="mysql8" lb-name="mysql" join-style="ansi-no-parenthesis" offset-style="limit" from-lateral-style="lateral"
                 never-nulls="true" table-engine="InnoDB" character-set="utf8" collate="utf8_general_ci" fk-style="name_fk"
                 constraint-name-clip-length="60"
                 default-isolation-level="ReadCommitted" default-test-query="SELECT 1"
-                default-startup-add-missing="true" default-runtime-add-missing="false"
+                default-startup-add-missing="true" default-runtime-add-missing="true"
                 default-jdbc-driver="com.mysql.cj.jdbc.Driver"
                 default-xa-ds-class="com.mysql.cj.jdbc.MysqlXADataSource">
             <!-- NOTE that from-lateral-style=lateral requires MySQL 8.0.14 or later -->
@@ -787,6 +842,7 @@
                     serverTimezone="${database_time_zone ?: default_time_zone}" useSSL="false" allowPublicKeyRetrieval="true"
                     databaseName="${entity_ds_database}" user="${entity_ds_user}" password="${entity_ds_password}"/></inline-jdbc>
         </database>
+        
         <!--
         * Oracle:
         <datasource group-name="transactional" database-conf-name="oracle" schema-name="MOQUI">
