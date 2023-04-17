@@ -155,8 +155,6 @@ class UserFacadeImpl implements UserFacade {
             if (indexOfColon > 0) {
                 String username = basicAuthAsString.substring(0, indexOfColon)
                 String password = basicAuthAsString.substring(indexOfColon + 1)
-                logger.info("---------------------------+++++++++"+username+"+++++++++---------------------")
-//                logger.info("---------------------------+++++++++"+username+"+++++++++---------------------")
                 String tenantId = secureParameters.authTenantId
                 this.loginUser(username, password, tenantId)
             } else {

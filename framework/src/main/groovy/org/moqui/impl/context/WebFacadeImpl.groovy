@@ -136,18 +136,21 @@ class WebFacadeImpl implements WebFacade {
                 multiPartParameters.put("_requestBodyText", bodyString)
 
                 if ((contentType.contains("application/json") || contentType.contains("text/json"))) {
+                    logger.info("+++++++++++++++++++ conitent type ai application json ")
                     try {
                         JsonNode jsonNode = ContextJavaUtil.jacksonMapper.readTree(bodyString)
                         if (jsonNode.isObject()) {
+                            logger.info("+++++++++++++++++++ conitent type is object  ")
                             jsonParameters = ContextJavaUtil.jacksonMapper.treeToValue(jsonNode, Map.class)
                         } else if (jsonNode.isArray()) {
+                            logger.info("+++++++++++++++++++ conitent type is array  ")
                             jsonParameters = [_requestBodyJsonList:ContextJavaUtil.jacksonMapper.treeToValue(jsonNode, List.class)] as Map<String, Object>
                         }
                     } catch (Throwable t) {
                         logger.error("Error parsing HTTP request body JSON: ${t.toString()}", t)
                         jsonParameters = [_requestBodyJsonParseError:t.getMessage()] as Map<String, Object>
                     }
-                    // logger.warn("=========== Got JSON HTTP request body: ${jsonParameters}")
+                     logger.warn("=========== Got JSON HTTP request body: ${jsonParameters}")
                 }
             }
         } else if (ServletFileUpload.isMultipartContent(request)) {
@@ -413,11 +416,12 @@ class WebFacadeImpl implements WebFacade {
         return requestParameters
     }
     @Override Map<String, Object> getSecureRequestParameters() {
+        
         ContextStack cs = new ContextStack(false)
         if (savedParameters) cs.push(savedParameters)
         if (multiPartParameters) cs.push(multiPartParameters)
         if (jsonParameters) cs.push(jsonParameters)
-logger.info("+++++++++++++++ tenant id from json params "+jsonParameters.get("tenant_id")+"++++++++++++++++++++++++++++++++++")
+
         Map<String, Object> reqParmMap = WebUtilities.simplifyRequestParameters(request, true)
         if (reqParmMap.size() > 0) cs.push(reqParmMap)
 

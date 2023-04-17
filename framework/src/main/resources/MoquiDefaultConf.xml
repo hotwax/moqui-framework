@@ -226,7 +226,7 @@
                 <url-pattern>/*</url-pattern>
                 <dispatcher>REQUEST</dispatcher>
             </filter>
-            <!-- ElasticSearch and Kibana auth filters, see below for proxy servlets on the same url-pattern -->
+<!--             ElasticSearch and Kibana auth filters, see below for proxy servlets on the same url-pattern -->
             <filter name="ElasticAuthFilter" class="org.moqui.impl.webapp.MoquiAuthFilter" async-supported="true">
                 <init-param name="permission" value="ElasticRemote"/>
                 <url-pattern>/elastic/*</url-pattern>
