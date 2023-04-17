@@ -65,8 +65,8 @@ class EntityDbMeta {
 
         String groupName = entityInfo.groupName
         Boolean runtimeAddMissing = (Boolean) runtimeAddMissingMap.get(groupName)
-        logger.info("+++++++========== checkTableRuntime value runtime add missing group name  = "+groupName)
-        logger.info("+++++++========== checkTableRuntime value runtime add missing  = "+runtimeAddMissing)
+//        logger.info("+++++++========== checkTableRuntime value runtime add missing group name  = "+groupName)
+//        logger.info("+++++++========== checkTableRuntime value runtime add missing  = "+runtimeAddMissing)
         if (runtimeAddMissing == null) {
             MNode datasourceNode = efi.getDatasourceNode(groupName)
             MNode dbNode = efi.getDatabaseNode(groupName)

@@ -91,22 +91,23 @@ class MoquiSessionListener implements HttpSessionListener, HttpSessionAttributeL
 
         // set thruDate on Visit
         Timestamp thruDate = new Timestamp(System.currentTimeMillis())
-        logger.info("+++++++++++++++oooooooooooooooooooooooooo closing previous visit ooooooooooooooooooooooooooooooooo")
+//        logger.info("+++++++++++++++oooooooooooooooooooooooooo closing previous visit ooooooooooooooooooooooooooooooooo")
+//        logger.info("+++++++++++++++oooooooooooooooooooooooooo running for id  "+visitId+" ooooooooooooooooooooooooooooooooo")
 //        Map<String, Object> visitMap = ecfi.serviceFacade.sync().name("get", "moqui.server.Visit").parameter("visitId", visitId).parameter("thruDate", thruDate)
 //                .disableAuthz().call()
         EntityList visitList = ecfi.entityFacade.find("moqui.server.Visit")
                 .condition("visitId", visitId).disableAuthz().list()
-        if(visitList.contains(visitId))
-        {
-            logger.info("+++++++++++++++oooooooooooooooooooooooooo list is not empty ooooooooooooooooooooooooooooooooo")
-            ecfi.serviceFacade.sync().name("update", "moqui.server.Visit").parameter("visitId", visitId).parameter("thruDate", thruDate)
-                    .disableAuthz().call()
-            if (logger.traceEnabled) logger.trace("Closed visit ${visitId} at ${thruDate} for session ${sessionId}")
+        
+        if(!visitList.isEmpty()){
+            if(visitList.getFirst().getString("visitId")==visitId) 
+            {
+                logger.info("+++++++++++++++oooooooooooooooooooooooooo list is not empty ooooooooooooooooooooooooooooooooo")
+                ecfi.serviceFacade.sync().name("update", "moqui.server.Visit").parameter("visitId", visitId).parameter("thruDate", thruDate)
+                        .disableAuthz().call()
+                if (logger.traceEnabled) logger.trace("Closed visit ${visitId} at ${thruDate} for session ${sessionId}")
+            }
         }
-//        else
-//        {
-//            logger.info("+++++++++++++++oooooooooooooooooooooooooo list is  empty ooooooooooooooooooooooooooooooooo")
-//        }
+
         
     }
 }

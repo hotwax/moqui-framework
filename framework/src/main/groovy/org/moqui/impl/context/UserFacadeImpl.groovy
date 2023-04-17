@@ -749,6 +749,7 @@ class UserFacadeImpl implements UserFacade {
     }
 
     void logoutLocal() {
+        logger.info(" -------------- logout local called ----------------------")
         // before logout trigger the before-logout actions
         if (eci.getWebImpl() != null) eci.getWebImpl().runBeforeLogoutActions()
 
@@ -762,6 +763,7 @@ class UserFacadeImpl implements UserFacade {
     }
 
     @Override void logoutUser() {
+        logger.info(" -------------- logout user called ----------------------")
         String userId = getUserId()
         // if userId set hasLoggedOut
         if (userId != null && !userId.isEmpty()) {

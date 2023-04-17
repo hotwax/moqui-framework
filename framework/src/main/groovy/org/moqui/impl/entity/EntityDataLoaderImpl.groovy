@@ -274,7 +274,7 @@ logger.info("---------------- Entity Data Laoder Impl calling internal run -----
         }
         if (locationList && logger.isInfoEnabled()) {
             StringBuilder lm = new StringBuilder("Loading entity data from the following locations: ")
-            logger.info("+++++++++====="+efi.tenantId);
+//            logger.info("+++++++++====="+efi.tenantId);
             for (String loc in locationList) lm.append("\n - ").append(loc)
             logger.info(lm.toString())
             logger.info("Loading data types: ${dataTypes ?: 'ALL'}")
@@ -287,11 +287,11 @@ logger.info("---------------- Entity Data Laoder Impl calling internal run -----
         TransactionFacadeImpl tf = efi.ecfi.transactionFacade
         tf.runRequireNew(transactionTimeout, "Error loading entity data", false, true, {
             
-            logger.info("+++-------------- Closure running")
+//            logger.info("+++-------------- Closure running")
             // load the XML text in its own transaction
             if (this.xmlText) {
                 tf.runUseOrBegin(transactionTimeout, "Error loading XML entity data", {
-                    logger.info("---------------- EDLI parsing xml in internal run   ------------------------ " )
+//                    logger.info("---------------- EDLI parsing xml in internal run   ------------------------ " )
                     XMLReader reader = SAXParserFactory.newInstance().newSAXParser().XMLReader
                     exh.setLocation("xmlText")
                     reader.setContentHandler(exh)
