@@ -355,14 +355,14 @@ logger.info("---------------- Entity Data Laoder Impl calling internal run -----
                 int messagesBefore = exh.valueHandler.messageList != null ? exh.valueHandler.messageList.size() : 0
 
                 if (location.endsWith(".xml")) {
-                    logger.info("+++-------------- is xml")
+//                    logger.info("+++-------------- is xml")
                     long beforeRecords = exh.valuesRead ?: 0
                     exh.setLocation(location)
 
                     SAXParser parser = SAXParserFactory.newInstance().newSAXParser()
-                    logger.info("+++-------------- is sax parsing")
+//                    logger.info("+++-------------- is sax parsing")
                     parser.parse(inputStream, exh)
-                    logger.info("+++-------------- is sax parsed")
+//                    logger.info("+++-------------- is sax parsed")
                     recordsLoaded = (exh.valuesRead?:0) - beforeRecords
                     logger.info("Loaded ${recordsLoaded} records from ${location} in ${((System.currentTimeMillis() - beforeTime)/1000)}s")
                 } else if (location.endsWith(".csv")) {

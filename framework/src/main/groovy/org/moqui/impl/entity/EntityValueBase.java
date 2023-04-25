@@ -118,6 +118,7 @@ public abstract class EntityValueBase implements EntityValue {
         // handle null after deserialize; this requires a static reference in Moqui.java or we'll get an error
         if (efiTransient == null) {
             ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory();
+//            efiTransient = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory().getEntityFacade(tenantId);
             if (ecfi == null) throw new EntityException("No ExecutionContextFactory found, cannot get EntityFacade for new EVB for entity " + entityName);
             efiTransient = ecfi.getEntityFacade(tenantId);
         }
@@ -1623,7 +1624,7 @@ public abstract class EntityValueBase implements EntityValue {
 
         // Save original values before anything is changed for DataFeed and audit log
         LiteStringMap<Object> originalValues = dbValueMap != null && !dbValueMap.isEmpty() ? new LiteStringMap<>(dbValueMap).useManualIndex() : null;
-
+        logger.info(":::::::::::::::::: Running update for entity "+entityName+" for tenant "+ec.getTenantId());
         // do the artifact push/authz
         ArtifactExecutionInfoImpl aei = new ArtifactExecutionInfoImpl(entityName, ArtifactExecutionInfo.AT_ENTITY, ArtifactExecutionInfo.AUTHZA_UPDATE, "update").setParameters(valueMapInternal);
         aefi.pushInternal(aei, !entityInfo.authorizeSkipTrue, false);

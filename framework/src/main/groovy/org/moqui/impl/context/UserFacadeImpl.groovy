@@ -124,7 +124,7 @@ class UserFacadeImpl implements UserFacade {
                 logger.info("User ${sesUsername} is authenticated in session but hasLoggedOut elsewhere, logging out")
                 webSubject.logout()
                 // Shiro invalidates session, but make sure just in case
-                HttpSession oldSession = request.getSession(false)
+                 HttpSession oldSession = request.getSession(false)
                 if (oldSession != null) oldSession.invalidate()
                 this.session = request.getSession()
             } else {
@@ -141,6 +141,7 @@ class UserFacadeImpl implements UserFacade {
             }
         }
 
+        
         this.visitId = session.getAttribute("moqui.visitId")
         logger.info("----------- Received visit Id from session attribute = "+session.getAttribute("moqui.visitId")+"------------------")
         // check for HTTP Basic Authorization for Authentication purposes

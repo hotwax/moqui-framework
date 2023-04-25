@@ -235,6 +235,12 @@
                 <init-param name="permission" value="KibanaRemote"/>
                 <url-pattern>/kibana/*</url-pattern>
             </filter>
+            
+<!--            Filter to capture incoming url -->
+<!--            <filter name="UrlCaptureFilter" class="">-->
+<!--                <url-pattern>/*</url-pattern>-->
+<!--            </filter>-->
+                
 
             <!-- Moqui Session Listener (necessary to handle expired sessions, etc) -->
             <listener class="org.moqui.impl.webapp.MoquiSessionListener"/>
