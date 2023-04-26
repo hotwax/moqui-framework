@@ -71,7 +71,8 @@ class ScheduledJobRunner implements Runnable {
         try {
             // run for each active tenant
             for (EntityFacadeImpl efi in allEntityFacades) {
-                logger.info(">>>>>>>>>>>>>>>>>>>>> Running for " + efi.tenantId)
+                eci.changeTenant(efi.tenantId);
+                logger.info(">>>>>>>>>>>>>>>>>>>>> Running for from efi" + efi.tenantId +" from eci "+eci.tenantId)
                 // make sure no transaction is in place, shouldn't be any so try to commit if there is one
                 if (ecfi.transactionFacade.isTransactionInPlace()) {
                     logger.warn("Found transaction in place in ServiceJobRunner thread, trying to commit")
@@ -116,7 +117,7 @@ class ScheduledJobRunner implements Runnable {
                         ZonedDateTime lastRunDt = (lastRunTime != (Timestamp) null) ?
                                 ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastRunTime.getTime()), now.getZone()) : null
                         logger.info("======+++++++++ last run date : " +lastRunDt);
-                        logger.info(">>>>>>>>>>>>>>>>>>>>> Running for " + efi.tenantId+" job anme "+jobName+ " job run Id : "+jobRunId)
+                        logger.info(">>>>>>>>>>>>>>>>>>>>> Running for " + efi.tenantId+" from eci " +eci.tenantId +" job anme "+jobName+ " job run Id : "+jobRunId)
                         if (serviceJobRunLock != null && serviceJobRunLock.jobRunId != null && lastRunDt != null) {
                             logger.info("----------------------------- Running for " + efi.tenantId)
                             // for failure with no lock reset: run recovery, based on expireLockTime (default to 1440 minutes)
@@ -125,13 +126,13 @@ class ScheduledJobRunner implements Runnable {
                             ZonedDateTime lockCheckTime = now.minusMinutes(expireLockTime.intValue())
                             logger.info("======+++++++++ last run date : " +lastRunDt + " lock check time "+lockCheckTime +" expire lock time "+expireLockTime);
                             if (lastRunDt.isBefore(lockCheckTime)) {
-                                logger.info("+++++++++++++++++++++++=== Running for " + efi.tenantId)
+                                logger.info("+++++++++++++++++++++++=== Running for " + efi.tenantId+" from eci "+eci.tenantId)
                                 // recover failed job without lock reset, run it if schedule says to
                                 logger.warn("Lock expired: found lock for job ${jobName} from ${lastRunDt}, more than ${expireLockTime} minutes old, ignoring lock")
                                 serviceJobRunLock.set("jobRunId", null).update()
                             } else {
                                 // normal lock, skip this job
-                                logger.info(" Lock found >>>>>>>> Running for " + efi.tenantId)
+                                logger.info(" Lock found >>>>>>>> Running for " + efi.tenantId +" from eci "+eci.tenantId)
                                 continue
                             }
                         }
@@ -179,6 +180,7 @@ class ScheduledJobRunner implements Runnable {
                     serviceCallJob.clearLock()
                     // run it, will run async
                     try {
+                        logger.info("****** Final run call for job run ID "+jobRunId+" with tenant "+ efi.tenantId)
                         serviceCallJob.run()
                     } catch (Throwable t) {
                         logger.error("Error running scheduled job ${jobName}", t)

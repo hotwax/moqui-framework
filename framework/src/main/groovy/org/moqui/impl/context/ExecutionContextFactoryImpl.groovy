@@ -1009,6 +1009,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     ExecutionContextImpl getEci() {
         // the ExecutionContextImpl cast here looks funny, but avoids Groovy using a slow castToType call
         ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
+//        logger.info("@@@@@@@@ called getEci for tenant "+ec.tenantId);
         if (ec != null) return ec
 
         Thread currentThread = Thread.currentThread()
