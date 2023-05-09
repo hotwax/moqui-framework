@@ -131,7 +131,7 @@ public class EntityValueImpl extends EntityValueBase {
             efi.getEntityDbMeta().checkTableRuntime(ed);
             
             if(con != null){ logger.info("++++++++++++++++++++++"+con.toString()+"++++++++++++++++++++");  eqb.useConnection(con);}
-            else{logger.info("++++++++++++++++++++++ Making Connection ++++++++++++++++++++++++"); 
+            else{logger.info("++++++++++++++++++++++ Making Connection for "+efi.tenantId+" ++++++++++++++++++++++++"); 
                 eqb.makeConnection(false);}
             eqb.makePreparedStatement();
             eqb.setPreparedStatementValues();

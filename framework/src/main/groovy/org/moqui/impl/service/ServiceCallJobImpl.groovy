@@ -80,7 +80,7 @@ class ServiceCallJobImpl extends ServiceCallImpl implements ServiceCallJob {
         ExecutionContextImpl eci = ecfi.getEci()
         validateCall(eci)
 
-        logger.info(" ^^^^^^ Inside run call for tenant = "+eci.tenantId)
+//        logger.info(" ^^^^^^ Inside run call for tenant = "+eci.tenantId)
 //        logger.info(" ^^^^^^ 2  Inside run call for tenant = "+efi.tenantId)
         String jobRunId
         if (withJobRunId == null) {

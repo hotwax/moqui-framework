@@ -120,9 +120,7 @@ public abstract class EntityValueBase implements EntityValue {
             ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory();
             if (ecfi == null) throw new EntityException("No ExecutionContextFactory found, cannot get EntityFacade for new EVB for entity " + entityName);
             efiTransient = ecfi.getEntityFacade(tenantId);
-            logger.info("@@@@@@@@@@@@ called getEntityFacadeImpl() ecfi.getEntityFacade for tenant Id"+tenantId);
         }
-        logger.info("@@@@@@@@@@@@ called getEntityFacadeImpl() returning efitransient for tenant Id"+efiTransient.tenantId);
         return efiTransient;
     }
     private TransactionCache getTxCache(ExecutionContextFactoryImpl ecfi) {
@@ -1590,7 +1588,6 @@ public abstract class EntityValueBase implements EntityValue {
     public EntityValue update() {
         final EntityDefinition ed = getEntityDefinition();
         final EntityJavaUtil.EntityInfo entityInfo = ed.entityInfo;
-        logger.info("################## calling getEntityFacadeImpl() ");
         final EntityFacadeImpl efi = getEntityFacadeImpl();
         final ExecutionContextFactoryImpl ecfi = efi.ecfi;
         final ExecutionContextImpl ec = ecfi.getEci();
@@ -1600,9 +1597,7 @@ public abstract class EntityValueBase implements EntityValue {
         final boolean hasFieldDefaults = entityInfo.hasFieldDefaults;
         final boolean needsAuditLog = entityInfo.needsAuditLog;
         final boolean createOnlyAny = entityInfo.createOnly || entityInfo.createOnlyFields;
-//        efi.tenantId
-        logger.info("------------------- after geEntityFacadeImpl "+ec.getTenantId());
-        logger.info("------------------- 2 after geEntityFacadeImpl "+efi.tenantId);
+
         if (entityInfo.isTenantcommon && !"DEFAULT".equals(ec.getTenantId()))
             throw new ArtifactAuthorizationException("Cannot update tenantcommon entities through tenant " + ec.getTenantId());
         
@@ -1628,7 +1623,6 @@ public abstract class EntityValueBase implements EntityValue {
 
         // Save original values before anything is changed for DataFeed and audit log
         LiteStringMap<Object> originalValues = dbValueMap != null && !dbValueMap.isEmpty() ? new LiteStringMap<>(dbValueMap).useManualIndex() : null;
-        logger.info(":::::::::::::::::: Running update for entity "+entityName+" for tenant "+efi.tenantId);
         // do the artifact push/authz
         ArtifactExecutionInfoImpl aei = new ArtifactExecutionInfoImpl(entityName, ArtifactExecutionInfo.AT_ENTITY, ArtifactExecutionInfo.AUTHZA_UPDATE, "update").setParameters(valueMapInternal);
         aefi.pushInternal(aei, !entityInfo.authorizeSkipTrue, false);
