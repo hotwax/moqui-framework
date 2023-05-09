@@ -236,11 +236,21 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         logger.info("Screen Facade initialized")
 
         postFacadeInit()
-
+        // Load all tenants in the tenantMap
+        logger.info("~~~~~~~~~~~~~ Loading all tenants started ~~~~~~~~~~~~~~~~~~~~~~~~")
+        ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
+        logger.info("~~~~~~~~~~~~~ "+ec+" ~~~~~~~~~~~~~~~~~~~~~~~~")
+        EntityList tenantList = ec.entity.find("moqui.tenant.Tenant").disableAuthz().list()
+        for (EntityValue tenant in tenantList) {
+            logger.info("~~~~~~~~~~~~~ initialising tenant "+tenant.tenantId+"~~~~~~~~~~~~~~~~~~~~~~~~")
+            String tenantId=tenant.tenantId;
+            initEntityFacade(tenantId); 
+        }
+        logger.info(" 2 ~~~~~2~~~~~~~~ Loading all tenants ended ~~~~~~2~~~~~~~~~~~~2~~~~~~")
         // NOTE: ElasticFacade init after postFacadeInit() so finds embedded from moqui-elasticsearch if present, can move up once moqui-elasticsearch deprecated
         elasticFacade = new ElasticFacadeImpl(this)
         logger.info("Elastic Facade initialized")
-
+        
         logger.info("Execution Context Factory initialized in ${(System.currentTimeMillis() - initStartTime)/1000} seconds")
     }
 
@@ -983,7 +993,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     EntityFacadeImpl getEntityFacade(@Nonnull String tenantId) {
 //        logger.info("Called get entity facade ------------------------------------- 5")
         EntityFacadeImpl efi = (EntityFacadeImpl) entityFacadeByTenantMap.get(tenantId)
-//        logger.info("Called get entity facade ------------------------------------- 6")
+//        logger.info("Called get entity facade ------------------------------------ 6")
         if (efi == null) efi = initEntityFacade(tenantId)
 
         return efi
