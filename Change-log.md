@@ -50,8 +50,48 @@ Added tenant information to ArtifactHit and Connection Wrapper
 3. Modified initCaches(), initWebFacade(), toString(), run() to include tenant information.
 4. Added getTenantId(), getTenant(), changeTenant(), getThreadTenantId(), setThreadTenantId, ThreadPoolRunnable Constructor
 
-#### 13. NotificationMessageImpl.groovy
+#### 14. NotificationMessageImpl.groovy
 1. Added string tenantId 
 2. Modified base constructor, getNotificationTopic(), readExternal() to include tenant info.
 3. Replaced entityFacade and entity with getEntity(tenantId)
 4.  Replaced entityFacade with getEntityFacade(tenantId).
+
+#### 15. TransactionFacadeImpl.groovy
+1. Modified getTxConnection(), stashTxConnection()
+
+#### 16. TransactionInternalBitronix.groovy 
+1. Modified get DataSource
+
+#### 17.  UserFacadeImpl.groovy
+1. Modified initFromHttpRequest(), initFromHandshakeRequest(),  initFromHttpSession(), loginUser(), internalloginUser(), internalLoginToken(), logoutLocal(),  loginUserKey(), pushUserSubject(), pushUser(), pushTenant(), popTenant(), setInfo() to include and work with tenantId.
+
+2. Addded String tenantId 
+   
+#### 18.   EntityCache.groovy
+1. Converted strings from static final to final, values setting by tenant
+2. Modified EntityCacheInvalidate(), writeExternal(), readExternal(), clearCacheForValue()  to use tenantId. 
+
+#### 19.EntityDataDocument.groovy
+1. Modified mergeValueToDocMap() to use getEci() and getTenantId() 
+    
+#### 20.   EntityDataFeed.groovy
+1. Modified constructor EntityDataFeed and logs to display tenant Id 
+
+#### 21.   EntityDataSourceFactoryImpl.groovy
+1. Added tenantId param in init() method 
+
+#### 22.   EntityDbMeta.groovy
+Modified runsqlUpdate to pass shared connection null by default.
+
+#### 23. EntityDefinition.groovy
+1. Modified getCacheOne(), getCacheOneRa(), getCacheOneViewRa(), getCacheList(), getCacheListRa(), getCacheListViewRa(), getCacheCount() to take tenantId parameter.
+   
+#### 24.   EntityFacadeImpl 
+1. Modified constructor, postFacadeInit(), static class DatasourceInfo, cachedOneEntities(), warmCache(), clearEntityDefinitionFromCache() 
+2. Added getTenantId()
+
+#### 25.   EntityFindBase.groovy
+1. Modified oneInternal(), listInternal(), iteratorInternal(), countInternal(), updateAllInternal(), deleteAllInternal() - to check for common tenant condition.
+
+#### 26.   EntityUtil.java
+1. Modified EntityInfo() to check if transactional group name is tenantcommon.
