@@ -28,4 +28,30 @@ Services to operate on tenant - disable, enable, create, provision, setup, creat
 ### 9. Modified UserServices.xml
 Added field tenantId and called changeTenant method when changes to user are made.
 
-### 10. 
+### 10. CacheFacadeImpl.groovy
+Added shared cache map for tenants
+Added and modified methods to use cache with tenants - getFullName, isTenantsShare, getCacheInternal, getAllCachesInfo, initCache, createCache
+
+### 11. ContextJavaUtil.java
+Added tenant information to ArtifactHit and Connection Wrapper
+
+### 12. ExecutionContextFactoryImpl.groovy
+1. Added maps entityFacadeByTenant, deferredHitInfoQueueByTenant, 
+2. Add and Initialize defaultEntityFacade
+3. Added code to load all tenants on startup 
+4. Added methods getCacheFacade, initEntityFacade, getDeferredHitInfoQueue
+5. Modified getEntity, flushqueue
+6. Added tenant entities to entitiesToSkipHitCount
+7. Running deferredHitInfoQueueByTenant for all tenants 
+
+#### 13.   ExecutionContextImpl.java
+1. Added activeTenantId, tenantIdStack 
+2. Replaced entityFacade with getEntityFacade for active tenant.
+3. Modified initCaches(), initWebFacade(), toString(), run() to include tenant information.
+4. Added getTenantId(), getTenant(), changeTenant(), getThreadTenantId(), setThreadTenantId, ThreadPoolRunnable Constructor
+
+#### 13. NotificationMessageImpl.groovy
+1. Added string tenantId 
+2. Modified base constructor, getNotificationTopic(), readExternal() to include tenant info.
+3. Replaced entityFacade and entity with getEntity(tenantId)
+4.  Replaced entityFacade with getEntityFacade(tenantId).
