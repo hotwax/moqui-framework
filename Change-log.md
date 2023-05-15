@@ -95,3 +95,139 @@ Modified runsqlUpdate to pass shared connection null by default.
 
 #### 26.   EntityUtil.java
 1. Modified EntityInfo() to check if transactional group name is tenantcommon.
+
+#### 27.   EntityListImpl.java
+1. Modified constructors of EntityListImpl(), writeExternal(), readExternal() 
+
+#### 27. EntityValueBase.java 
+1. Modified constructor of EntityValueBase, writeExternal(), readExternal(), create(),  update(), delete(). 
+
+#### 28. EntityDatasourceFactory.java
+1. Added tenantId in  init(). 
+
+#### 29.   ScreenDefinition.groovy
+1. Added hashset tenantsAllowed, getTenantsAllowes()
+2. Modified ScreenDefinition(), static class SubscreensItems and it's constructors, isValidInCurrentContext()   		 
+
+#### 30. ScreenRenderImpl.groovy
+1. Modified recursiveRunActions(), doActualRender(), renderSubscreen()
+
+#### 31. ScreenTestImpl.groovy
+1. Modified ScreenTestRender render(), run()
+
+#### 32. ScreenUrlInfo.groovy
+1. Modified isPermitted(), initUrl(),  
+
+#### 33. RestApi.groovy
+1. Added tenant_id header in getSwaggerMap
+   
+#### 34. ScheduledJobRunner.groovy
+1. Replaced cronByExpression hash map with executionTimeByExpression.
+2. Modified run() to get allEntityFacades and execute job for each tenant.
+
+#### 35. ServiceCallAsyncImpl.groovy
+1. Modified AsyncServiceInfo(), writeExternal(), readExternal(), AsyncServiceInfo > runInternal().   
+
+#### 36. ServiceCallImpl.java
+1. Added authTenantId in validateCall().
+
+#### 37. ServiceCallJobImpl.java
+1. Modified ServiceJobCallable(), writeExternal(), readExternal(), ServiceJobCallable>run()
+
+#### 38. ServiceCallSyncImpl.java
+1. Modified call() and callSingle()
+
+#### 39. ServiceFacadeImpl.groovy
+
+#### 40.   EntityAutoServiceRunner.groovy
+1. Added authTenantId in otherFieldsToSkip in EntityAutoServiceRunner.groovy
+
+#### 41. MoquiShiroRealm.groovy
+1. Added tenantId parameter in MoquiShiroRealm to facilitate login with tenantId
+
+#### 42. MoquiAbstractEndpoint.groovy
+1. Added method getTenantId 
+
+#### 43. MoquiSessionListener.groovy
+1. Updated method closeVisit() to resolve visit Id not found exception in multi-tenant.
+
+#### 44. NotificationWebSocketListener.groovy  
+1. Modified registerEndpoint(), deregisterEndpoint(), onMessage() to use tenantId with user.
+
+#### 45. Moqui.java
+1. Modified loadData() to set tenantId.
+#### 46. CacheFacade.java
+1. Added getCache() for tenant specific cache.
+
+#### 47. ExecutionContext.java
+1. Added method getTenant(), getTenantId(), changeTenant(), popTenant().
+
+#### 48. ExecutionContextFactory.java
+1. Modified method for getEntity() to use tenantId.
+
+#### 49. NotificationMessage.java
+1. Added method getTenantId()
+
+#### 50. TransactionalInternal.java
+1. Modified getDataSource() to use tenantId.
+
+#### 51. UserFacade.java
+1. Modified loginUser(), loginUserKey() to use tenantId.
+
+#### 52. EntityDataSourceFactory.java
+1. Modified init() method to use tenantId 
+
+#### 54. MoquiDefaultConf.xml
+1. Set default property "entity_add_missing_runtime" to true to enable creating tables when a new tenant is provisioned.
+
+2. Added tenants-share="true" in caches - service.location, service.rest.api, kie.component.releaseId, kie.session.component, screen.location, screen.location.perm, screen.url, screen.info, screen.info.ref.rev, screen.template.mode, screen.template.location, widget.template.location, screen.find.path, screen.form.db.node, resource.xml-actions.location, resource.groovy.location, resource.javascript.location, resource.ftl.location, resource.gstring.location, resource.wiki.location, resource.markdown.location, resource.text.location, resource.reference.location
+3. Added service file location for TenantServices.xml
+4. Added default properties of transactional database.
+5. Added xa-properties in configuration of transactional database in datasource group-name="transactional"
+6. Added datasource group-name="tenantcommon" 
+7. Added entity-location for TenantEntities.xml
+8. Added data location for TenantDefaultData,xml
+9. Add default-runtime-add-missing="true" in 'mysql8' configuration.
+ 
+#### 55. ResouceFacadeTest.groovy
+1. Replaced moquiVersion with tenantId in evaluate String and evaluate Context Field functions
+
+#### 56. SystemScreenRenderTest.groovy
+1. Updated cacheName from l10n to DEFAULT__l10n in cleanupSpec()
+
+#### 57. Common tests update
+Passed tenandId 'null' in loginUser() in all *test.groovy files
+
+#### 58. entity-definition-3.xsd
+1. Added xs:enumeration value="tenantcommon" 
+#### 59. moqui-conf-3.xsd
+1. Added attribute name="tenants-share" type="boolean" default="false" to element "cache"
+#### 60. service-definition-3.xsd 
+Added authTenantId description.
+
+#### 61.xml-screen-3.xsd 
+Added attribute "tenantsAllowed"
+
+#### 62. build.gradle 
+1. Modified task cleanLoadSave to delete SaveTenant.zip 
+2. Added args in task load, loadSeed, loadInitial and loadProduction to check for tenantId in properties and set default value.
+3.  Modified task saveDb to save Derby database in SaveTenant.zip file
+4. Modified taskReloadSave to load SaveTenant.zip if file exists
+  
+#### 15. Common Changes - 
+1. Replaced entityFacade and entity with getEntity(tenantId)
+2.  Replaced entityFacade with getEntityFacade(tenantId).
+   
+
+
+
+### 1. MoquiSessionListener.groovy
+**Issue**
+Whenever moqui is accessed from a browser, a session is created and stored as visitId is created and stored in the Visitor table, even without logging in.
+
+When the user logs in it goes to the database to update the thru date  by this Visit Id.
+This causes an error. Because Visit Id is created using DEFAULT tenant and stored in Default tenant's database, After logging in from another tenant it does not find the same value in the tenant's database. Causing null pointer exception
+   
+ **Solution**
+Added code to destroy the existing VisitId stored in session and  to check if Visit Id exists in the database. If it exists then update the through date.
+
