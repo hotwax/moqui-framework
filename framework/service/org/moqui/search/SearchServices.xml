@@ -177,6 +177,7 @@ along with this software (see the LICENSE.md file). If not, see
             int sizeLimit = pageNoLimit ? 10000 : pageSize
 
             documentList = []
+            // if (!indexName.contains("__")) indexName = "${ec.tenantId}__${indexName}".toLowerCase()
             boolean hasHighlights = highlightFields != null && highlightFields.size() > 0
 
             // make sure index exists

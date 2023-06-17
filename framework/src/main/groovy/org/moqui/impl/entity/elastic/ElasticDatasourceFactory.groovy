@@ -127,6 +127,7 @@ class ElasticDatasourceFactory implements EntityDatasourceFactory {
 
     @Override
     void createBulk(List<EntityValue> valueList) {
+        logger.info("Called create bulk -----------------------")
         if (valueList == null || valueList.isEmpty()) return
         ElasticFacade.ElasticClient elasticClient = getElasticClient()
 

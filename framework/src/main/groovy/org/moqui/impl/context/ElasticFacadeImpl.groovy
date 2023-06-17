@@ -23,12 +23,14 @@ import groovy.json.JsonOutput
 import groovy.transform.CompileStatic
 
 import org.moqui.BaseException
+import org.moqui.Moqui
 import org.moqui.context.ElasticFacade
 import org.moqui.entity.EntityException
 import org.moqui.entity.EntityList
 import org.moqui.entity.EntityValue
 import org.moqui.impl.entity.EntityDataDocument
 import org.moqui.impl.entity.EntityDefinition
+import org.moqui.impl.entity.EntityFacadeImpl
 import org.moqui.impl.entity.EntityJavaUtil
 import org.moqui.impl.entity.FieldInfo
 import org.moqui.impl.util.ElasticSearchLogger
@@ -239,7 +241,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         boolean indexExists(final String index) {
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("Index name required")
-            RestClient.RestResponse response = makeRestClient(Method.HEAD, index, null, null).call()
+            String tenant_index = ecfi.eci.tenantId.toLowerCase()+"__"+index;
+            RestClient.RestResponse response = makeRestClient(Method.HEAD, tenant_index, null, null).call()
             return response.statusCode == 200
         }
         @Override
@@ -254,6 +257,7 @@ class ElasticFacadeImpl implements ElasticFacade {
         void createIndex(String index, Map docMapping, String origAlias) { createIndex(index, null, docMapping, origAlias, null) }
         void createIndex(String index, String docType, Map docMapping, String origAlias) { createIndex(index, docType, docMapping, origAlias, null) }
         void createIndex(String index, String docType, Map docMapping, String origAlias, Map settings) {
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("Index name required")
             RestClient restClient = makeRestClient(Method.PUT, index, null, null)
             if (docMapping || origAlias) {
@@ -278,6 +282,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         void putMapping(String index, Map docMapping) { putMapping(index, null, docMapping) }
         void putMapping(String index, String docType, Map docMapping) {
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("Called put Mapping for -------------------"+index)
             if (!docMapping) throw new IllegalArgumentException("Mapping may not be empty for put mapping")
             // NOTE: this is for ES 7.0+ only, before that mapping needed to be named in the path
             String path = esVersionUnder7 ? "_mapping/" + (docType?:'_doc') : "_mapping"
@@ -288,6 +294,7 @@ class ElasticFacadeImpl implements ElasticFacade {
         }
         @Override
         void deleteIndex(String index) {
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
             RestClient restClient = makeRestClient(Method.DELETE, index, null, null)
             RestClient.RestResponse response = restClient.call()
             checkResponse(response, "Delete index", index)
@@ -297,6 +304,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         void index(String index, String _id, Map document) {
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("In index document the index name may not be empty")
             if (_id == null || _id.isEmpty()) throw new IllegalArgumentException("In index document the _id may not be empty")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ index called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.PUT, index, "_doc/" + _id, null, SMALL_OP_REQUEST_TIMEOUT)
                     .text(objectToJson(document)).call()
             checkResponse(response, "Index document ${_id}", index)
@@ -306,6 +315,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         void update(String index, String _id, Map documentFragment) {
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("In update document the index name may not be empty")
             if (_id == null || _id.isEmpty()) throw new IllegalArgumentException("In update document the _id may not be empty")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ update index called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.POST, index, "_update/" + _id, null, SMALL_OP_REQUEST_TIMEOUT)
                     .text(objectToJson([doc:documentFragment])).call()
             checkResponse(response, "Update document ${_id}", index)
@@ -315,6 +326,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         void delete(String index, String _id) {
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("In delete document the index name may not be empty")
             if (_id == null || _id.isEmpty()) throw new IllegalArgumentException("In delete document the _id may not be empty")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ delete document called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.DELETE, index, "_doc/" + _id, null, SMALL_OP_REQUEST_TIMEOUT).call()
             if (response.statusCode == 404) {
                 logger.warn("In delete document not found in index ${index} with ID ${_id}")
@@ -326,6 +339,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         Integer deleteByQuery(String index, Map queryMap) {
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("In delete by query the index name may not be empty")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ delete by query called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.POST, index, "_delete_by_query", null)
                     .text(objectToJson([query:queryMap])).call()
             checkResponse(response, "Delete by query", index)
@@ -336,11 +351,14 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         void bulk(String index, List<Map> actionSourceList) {
             if (actionSourceList == null || actionSourceList.size() == 0) return
-
+            logger.info("++--- tenant in BULK -------"+ecfi.eci.tenantId)
             RestClient.RestResponse response = bulkResponse(index, actionSourceList, false)
             checkResponse(response, "Bulk operations", index)
         }
         RestClient.RestResponse bulkResponse(String index, List<Map> actionSourceList, boolean refresh) {
+//            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+//            ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory()
+            logger.info("===== tenant in bulkResponse -------------"+ecfi.eci.tenantId)
             // NOTE: don't use logger in this method, with ElasticSearchLogger in place results in infinite log feedback
             if (actionSourceList == null || actionSourceList.size() == 0) return null
 
@@ -349,7 +367,8 @@ class ElasticFacadeImpl implements ElasticFacade {
                 // look for _index fields in each Map, if found prefix
                 if (entry.size() == 1) {
                     Map actionMap = entry.values().first()
-                    Object _indexVal = actionMap.get("_index")
+                    Object _indexVal = ecfi.eci.tenantId.toLowerCase()+"__"+actionMap.get("_index")
+//                    logger.info("------ + + Calling bulk response -------------------"+_indexVal.toString())
                     if (_indexVal != null && _indexVal instanceof String) actionMap.put("_index", prefixIndexName((String) _indexVal))
                 }
                 // System.out.println("bulk entry ${entry}")
@@ -357,6 +376,7 @@ class ElasticFacadeImpl implements ElasticFacade {
                 jacksonMapper.writeValue(bodyWriter, entry)
                 bodyWriter.append((char) '\n')
             }
+            
             RestClient restClient = makeRestClient(Method.POST, index, "_bulk", [refresh:(refresh ? "true" : "wait_for")])
                     .contentType("application/x-ndjson")
             restClient.timeout(600)
@@ -371,6 +391,7 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         void bulkIndex(String index, String idField, List<Map> documentList) { bulkIndex(index, null, idField, documentList, false) }
         void bulkIndex(String index, String docType, String idField, List<Map> documentList, boolean refresh) {
+            logger.info( "==++++++==== tenant in bulkIndex ----"+ecfi.eci.tenantId)
             List<Map> actionSourceList = new ArrayList<>(documentList.size() * 2)
             boolean hasId = idField != null && !idField.isEmpty()
             int loopIdx = 0
@@ -406,11 +427,13 @@ class ElasticFacadeImpl implements ElasticFacade {
                 // NOTE: this is for partial backwards compatibility for specific scenarios, remove after moqui-elasticsearch deprecate
                 path = esIndexToDdId(index) + "/" + _id
             }
-            RestClient.RestResponse response = makeRestClient(Method.GET, index, path, null, SMALL_OP_REQUEST_TIMEOUT).call()
+            String tenant_index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ get called -___________________"+tenant_index)
+            RestClient.RestResponse response = makeRestClient(Method.GET, tenant_index, path, null, SMALL_OP_REQUEST_TIMEOUT).call()
             if (response.statusCode == 404) {
                 return null
             } else {
-                checkResponse(response, "Get document ${_id}", index)
+                checkResponse(response, "Get document ${_id}", tenant_index)
                 return (Map) jsonToObject(response.text())
             }
         }
@@ -421,6 +444,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         List<Map> get(String index, List<String> _idList) {
             if (_idList == null || _idList.size() == 0) return []
             if (index == null || index.isEmpty()) throw new IllegalArgumentException("In get documents the index name may not be empty")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ List<Map> get called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.GET, index, "_mget", null)
                     .text(objectToJson([ids:_idList])).call()
             checkResponse(response, "Get document multi", index)
@@ -430,6 +455,8 @@ class ElasticFacadeImpl implements ElasticFacade {
 
         @Override
         Map search(String index, Map searchMap) {
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ search called -___________________"+index)
             // logger.warn("Search ${index}\n${objectToJson(searchMap)}")
             RestClient.RestResponse response = makeRestClient(Method.GET, index, "_search", null).maxResponseSize(MAX_RESPONSE_SIZE_SEARCH)
                     .text(objectToJson(searchMap)).call()
@@ -454,6 +481,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         Map validateQuery(String index, Map queryMap, boolean explain) {
             String queryJson = objectToJson([query:queryMap])
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ validate query called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.GET, index, "_validate/query", explain ? [explain:'true'] : null, SMALL_OP_REQUEST_TIMEOUT)
                     .text(queryJson).call()
             checkResponse(response, "Validate Query", index)
@@ -468,6 +497,8 @@ class ElasticFacadeImpl implements ElasticFacade {
 
         @Override
         long count(String index, Map countMap) {
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ count called -___________________"+index)
             Map resultMap = countResponse(index, countMap)
             Number count = (Number) resultMap.count
             return count != null ? count.longValue() : 0
@@ -476,6 +507,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         Map countResponse(String index, Map countMap) {
             if (countMap == null || countMap.isEmpty()) countMap = [query:[match_all:[:]]]
             // System.out.println("Count Request index ${index} ${countMap}")
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ count response called -___________________"+index)
             RestClient.RestResponse response = makeRestClient(Method.GET, index, "_count", null)
                     .text(objectToJson(countMap)).call()
             // System.out.println("Count Response: ${response.statusCode} ${response.reasonPhrase}\n${response.text()}")
@@ -487,6 +520,8 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         String getPitId(String index, String keepAlive) {
             if (keepAlive == null) keepAlive = "60s"
+            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
+            logger.info("++ get point in time id called -___________________"+index)
             RestClient.RestResponse response
             if (isOpenSearch) {
                 // see: https://opensearch.org/docs/latest/opensearch/point-in-time-api#create-a-pit
@@ -540,6 +575,9 @@ class ElasticFacadeImpl implements ElasticFacade {
             return makeRestClient(method, index, path, parameters, null)
         }
         RestClient makeRestClient(Method method, String index, String path, Map<String, String> parameters, Integer timeout) {
+//            if(!index.contains(ecfi.eci.tenantId)){
+//                index = ecfi.eci.tenantId.toLowerCase()+"__"+index   
+//            }
             // NOTE: don't use logger in this method, with ElasticSearchLogger in place results in infinite log feedback
             String serverIndex = prefixIndexName(index)
             // System.out.println("=== ES call index ${serverIndex} path ${path} parameters ${parameters}")
@@ -554,6 +592,7 @@ class ElasticFacadeImpl implements ElasticFacade {
 
         @Override
         void checkCreateDataDocumentIndexes(String indexName) {
+            logger.info("Called checkCreateDataDocumentsIndex--------------------------"+indexName)
             // if the index alias exists call it good
             if (indexExists(indexName)) return
 
@@ -574,6 +613,8 @@ class ElasticFacadeImpl implements ElasticFacade {
             for (EntityValue dd in ddList) storeIndexAndMapping(indexName, dd)
         }
         synchronized protected void storeIndexAndMapping(String indexName, EntityValue dd) {
+            indexName = ecfi.eci.tenantId.toLowerCase()+"__"+indexName
+            logger.info("storeIndexAndMapping Called -----------------------"+indexName)
             String dataDocumentId = (String) dd.getNoCheckSimple("dataDocumentId")
             String manualMappingServiceName = (String) dd.getNoCheckSimple("manualMappingServiceName")
             String esIndexName = ddIdToEsIndex(dataDocumentId)
@@ -584,6 +625,7 @@ class ElasticFacadeImpl implements ElasticFacade {
             Map settings = null
 
             if (manualMappingServiceName) {
+                logger.info("++ Running manual Mapping Service -------------------"+manualMappingServiceName)
                 def serviceResult = ecfi.service.sync().name(manualMappingServiceName).parameter('mapping', docMapping).call()
                 docMapping = (Map) serviceResult.mapping
                 settings = (Map) serviceResult.settings
@@ -613,6 +655,7 @@ class ElasticFacadeImpl implements ElasticFacade {
 
         @Override
         void bulkIndexDataDocument(List<Map> documentList) {
+            logger.info("++++++++++ tenantId in bulkIndexDataDocument ----------"+ecfi.eci.tenantId)
             int docsPerBulk = 1000
             int docListSize = documentList.size()
 
