@@ -244,11 +244,20 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         for (EntityValue tenant in tenantList) {
             logger.info("~~~~~~~~~~~~~ initialising tenant "+tenant.tenantId+"~~~~~~~~~~~~~~~~~~~~~~~~")
             String tenantId=tenant.tenantId;
-            initEntityFacade(tenantId); 
+            initEntityFacade(tenantId);
+            // To initialize elastic search for each tenant 
+            logger.info("................. getting entity facade "+tenant.tenantId+"+++++++++++++++++++++++++")
+            ec.changeTenant(tenantId);
+            EntityFacadeImpl efi = getEntityFacade(tenantId)
+            logger.info("^^^............. getting ecfi "+tenant.tenantId+"+++++++++++++++++++++++++")
+            ExecutionContextFactoryImpl ecfi = efi.ecfi
+            logger.info("^^^............. new elastic for ecfi "+ecfi.toString()+"+++++++++++++++++++++++++")
+            elasticFacade = new ElasticFacadeImpl(ecfi)     
         }
         logger.info(" 2 ~~~~~2~~~~~~~~ Loading all tenants ended ~~~~~~2~~~~~~~~~~~~2~~~~~~")
         // NOTE: ElasticFacade init after postFacadeInit() so finds embedded from moqui-elasticsearch if present, can move up once moqui-elasticsearch deprecated
-        elasticFacade = new ElasticFacadeImpl(this)
+//        elasticFacade = new ElasticFacadeImpl(this)
+        
         logger.info("Elastic Facade initialized")
         
         logger.info("Execution Context Factory initialized in ${(System.currentTimeMillis() - initStartTime)/1000} seconds")
