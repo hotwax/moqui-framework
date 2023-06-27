@@ -391,7 +391,6 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         void bulkIndex(String index, String idField, List<Map> documentList) { bulkIndex(index, null, idField, documentList, false) }
         void bulkIndex(String index, String docType, String idField, List<Map> documentList, boolean refresh) {
-            logger.info( "==++++++==== tenant in bulkIndex ----"+ecfi.eci.tenantId)
             List<Map> actionSourceList = new ArrayList<>(documentList.size() * 2)
             boolean hasId = idField != null && !idField.isEmpty()
             int loopIdx = 0
