@@ -153,7 +153,6 @@ class ElasticSearchLogger {
         LogMessageQueueFlush(ElasticSearchLogger esLogger) { this.esLogger = esLogger }
 
         @Override void run() {
-            logger.info("Running elastic search loggger -----------------------------")
             // if flag not false (expect param) return now, wait for next scheduled run
             if (!esLogger.flushRunning.compareAndSet(false, true)) return
 
@@ -201,8 +200,6 @@ class ElasticSearchLogger {
                     // long startTime = System.currentTimeMillis()
                     try {
                         ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory()
-                        logger.info("*************** called fllush queue ")
-                        logger.info("*************** flush queue tenantId  "+ecfi.eci.tenantId)
                         esLogger.elasticClient.bulkIndex(INDEX_NAME, DOC_TYPE, null, createList, false)
                     } catch (Exception e) {
                         System.out.println("Error logging to ElasticSearch: ${e.toString()}")
