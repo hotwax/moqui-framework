@@ -356,9 +356,6 @@ class ElasticFacadeImpl implements ElasticFacade {
             checkResponse(response, "Bulk operations", index)
         }
         RestClient.RestResponse bulkResponse(String index, List<Map> actionSourceList, boolean refresh) {
-//            index = ecfi.eci.tenantId.toLowerCase()+"__"+index
-//            ExecutionContextFactoryImpl ecfi = (ExecutionContextFactoryImpl) Moqui.getExecutionContextFactory()
-            logger.info("===== tenant in bulkResponse -------------"+ecfi.eci.tenantId)
             // NOTE: don't use logger in this method, with ElasticSearchLogger in place results in infinite log feedback
             if (actionSourceList == null || actionSourceList.size() == 0) return null
 
@@ -368,7 +365,6 @@ class ElasticFacadeImpl implements ElasticFacade {
                 if (entry.size() == 1) {
                     Map actionMap = entry.values().first()
                     Object _indexVal = ecfi.eci.tenantId.toLowerCase()+"__"+actionMap.get("_index")
-//                    logger.info("------ + + Calling bulk response -------------------"+_indexVal.toString())
                     if (_indexVal != null && _indexVal instanceof String) actionMap.put("_index", prefixIndexName((String) _indexVal))
                 }
                 // System.out.println("bulk entry ${entry}")
