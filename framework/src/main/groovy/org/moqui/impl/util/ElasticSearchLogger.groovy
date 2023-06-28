@@ -154,7 +154,7 @@ class ElasticSearchLogger {
 
         @Override void run() {
             // if flag not false (expect param) return now, wait for next scheduled run
-            if (!esLogger.flushRunning.compareAndSet(true, true)) return
+            if (!esLogger.flushRunning.compareAndSet(false, true)) return
 // Temporary changed the expected value to true to prevent while loop - custom change
             try {
                 while (esLogger.logMessageQueue.size() > 0) { flushQueue() }
