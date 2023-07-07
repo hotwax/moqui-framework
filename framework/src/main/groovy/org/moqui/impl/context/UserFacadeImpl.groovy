@@ -156,7 +156,7 @@ class UserFacadeImpl implements UserFacade {
             if (indexOfColon > 0) {
                 String username = basicAuthAsString.substring(0, indexOfColon)
                 String password = basicAuthAsString.substring(indexOfColon + 1)
-                String tenantId = secureParameters.authTenantId
+                String tenantId = request.getHeader("tenant_id")
                 this.loginUser(username, password, tenantId)
             } else {
                 logger.warn("For HTTP Basic Authorization got bad credentials string. Base64 encoded is [${basicAuthEncoded}] and after decoding is [${basicAuthAsString}].")
