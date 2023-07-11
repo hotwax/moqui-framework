@@ -237,24 +237,17 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
 
         postFacadeInit()
         // Load all tenants in the tenantMap
-        logger.info("~~~~~~~~~~~~~ Loading all tenants started ~~~~~~~~~~~~~~~~~~~~~~~~")
         ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
-        logger.info("~~~~~~~~~~~~~ "+ec+" ~~~~~~~~~~~~~~~~~~~~~~~~")
         EntityList tenantList = ec.entity.find("moqui.tenant.Tenant").disableAuthz().list()
         for (EntityValue tenant in tenantList) {
-            logger.info("~~~~~~~~~~~~~ initialising tenant "+tenant.tenantId+"~~~~~~~~~~~~~~~~~~~~~~~~")
             String tenantId=tenant.tenantId;
             initEntityFacade(tenantId);
             // To initialize elastic search for each tenant 
-            logger.info("................. getting entity facade "+tenant.tenantId+"+++++++++++++++++++++++++")
             ec.changeTenant(tenantId);
             EntityFacadeImpl efi = getEntityFacade(tenantId)
-            logger.info("^^^............. getting ecfi "+tenant.tenantId+"+++++++++++++++++++++++++")
             ExecutionContextFactoryImpl ecfi = efi.ecfi
-            logger.info("^^^............. new elastic for ecfi "+ecfi.toString()+"+++++++++++++++++++++++++")
             elasticFacade = new ElasticFacadeImpl(ecfi)     
         }
-        logger.info(" 2 ~~~~~2~~~~~~~~ Loading all tenants ended ~~~~~~2~~~~~~~~~~~~2~~~~~~")
         // NOTE: ElasticFacade init after postFacadeInit() so finds embedded from moqui-elasticsearch if present, can move up once moqui-elasticsearch deprecated
 //        elasticFacade = new ElasticFacadeImpl(this)
         
@@ -1008,12 +1001,10 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         return efi
     }
     synchronized EntityFacadeImpl initEntityFacade(String tenantId) {
-        logger.info("init entity facade ------------------------------------- 7")
         EntityFacadeImpl efi = this.entityFacadeByTenantMap.get(tenantId)
         if (efi != null) return efi
 
         efi = new EntityFacadeImpl(this, tenantId)
-        logger.info("init entity facade ------------------------------------- ecfi8")
         this.entityFacadeByTenantMap.put(tenantId, efi)
         logger.info("Entity Facade for tenant ${tenantId} initialized")
         return efi

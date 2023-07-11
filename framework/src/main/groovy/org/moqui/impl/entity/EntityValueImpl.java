@@ -110,7 +110,6 @@ public class EntityValueImpl extends EntityValueBase {
     public void updateExtended(FieldInfo[] pkFieldArray, FieldInfo[] nonPkFieldArray, Connection con) throws SQLException {
         EntityDefinition ed = getEntityDefinition();
         final EntityFacadeImpl efi = getEntityFacadeImpl();
-        logger.info("++++++++++++++++++++++  EFI Tenant Id "+efi.tenantId+" ++++++++++++++++++++++++");
         if (ed.isViewEntity) throw new EntityException("Update not yet implemented for view-entity");
         final EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
         ArrayList<EntityConditionParameter> parameters = eqb.parameters;
@@ -130,9 +129,8 @@ public class EntityValueImpl extends EntityValueBase {
         try {
             efi.getEntityDbMeta().checkTableRuntime(ed);
             
-            if(con != null){ logger.info("++++++++++++++++++++++"+con.toString()+"++++++++++++++++++++");  eqb.useConnection(con);}
-            else{logger.info("++++++++++++++++++++++ Making Connection for "+efi.tenantId+" ++++++++++++++++++++++++"); 
-                eqb.makeConnection(false);}
+            if(con != null) eqb.useConnection(con);
+            else eqb.makeConnection(false);
             eqb.makePreparedStatement();
             eqb.setPreparedStatementValues();
 

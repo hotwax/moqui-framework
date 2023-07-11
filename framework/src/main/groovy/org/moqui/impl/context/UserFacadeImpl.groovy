@@ -98,8 +98,10 @@ class UserFacadeImpl implements UserFacade {
 
         String queryString = request.getQueryString();
         String queryTenantId = request.getParameter("tenantId");
-        logger.info("----------- query string = "+queryString+"------------------")
-        logger.info("----------- query tenant ID  = "+queryTenantId+"------------------")
+            logger.info("----------- query string = "+queryString+"------------------")
+            logger.info("----------- query tenant ID  = "+queryTenantId+"------------------")
+        
+//        Get tenant Id from sub-domain ex tenant1.myapp.co
         logger.info("----------- Sub domain  = "+request.getServerName().split("\\.")[0]+"------------------")
         
         // get client IP address, handle proxy upstream address if added in a header

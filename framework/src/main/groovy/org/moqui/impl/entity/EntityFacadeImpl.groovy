@@ -139,10 +139,8 @@ class EntityFacadeImpl implements EntityFacade {
             } catch (Exception e) { logger.warn("Error parsing database-locale: ${e.toString()}") }
         }
         databaseLocale = theLocale ?: Locale.getDefault()
-        logger.info("init entity facade -------------------------------------efimpl 13")
         // init entity meta-data
         entityDefinitionCache = ecfi.cacheFacade.getCache("entity.definition", this.tenantId)
-        logger.info("init entity facade -------------------------------------efimpl 14")
         entityLocationSingleCache = ecfi.cacheFacade.getCache("entity.location", this.tenantId)
         
         // NOTE: don't try to load entity locations before constructor is complete; this.loadAllEntityLocations()
@@ -287,21 +285,16 @@ class EntityFacadeImpl implements EntityFacade {
     }
 
     protected void initAllDatasources() {
-        logger.info("init all data sources ------------------------------------- 1")
         for (MNode datasourceNode in getEntityFacadeNode().children("datasource")) {
             
             datasourceNode.setSystemExpandAttributes(true)
             String groupName = datasourceNode.attribute("group-name")
-            logger.info("============= data source node = "+groupName+"---")
             if ("true".equals(datasourceNode.attribute("disabled"))) {
                 logger.info("Skipping disabled datasource ${groupName}")
                 continue
             }
-            logger.info("init all data sources ------------------------------------- 2")
             String objectFactoryClass = datasourceNode.attribute("object-factory") ?: "org.moqui.impl.entity.EntityDatasourceFactoryImpl"
-            logger.info("init all data sources ------------------------------------- 3")
             EntityDatasourceFactory edf = (EntityDatasourceFactory) Thread.currentThread().getContextClassLoader().loadClass(objectFactoryClass).newInstance()
-            logger.info("init all data sources ------------------------------------- 4")
             datasourceFactoryByGroupMap.put(groupName, edf.init(this, datasourceNode, this.tenantId))
         }
     }
@@ -328,12 +321,9 @@ class EntityFacadeImpl implements EntityFacade {
             String tenantId = efi.tenantId
             String groupName = datasourceNode.attribute("group-name")
             uniqueName =  "${tenantId}_${groupName}_DS"
-            logger.info("------------------------------------- Data source info for tenant  "+tenantId+" ------------------------------------------------------------------------")
-            logger.info("------------------------------------- group name for tenant  "+groupName+" ------------------------------------------------------------------------")
             EntityValue tenant = null
             EntityFacadeImpl defaultEfi = null
             if (tenantId != "DEFAULT" && groupName != "tenantcommon") {
-                logger.info("------------------------------------- Searching for tenant in DB  ------------------------------------------------------------------------")
                 defaultEfi = efi.ecfi.defaultEntityFacade
                 tenant = defaultEfi.find("moqui.tenant.Tenant").condition("tenantId", tenantId).disableAuthz().one()
             }
@@ -341,11 +331,9 @@ class EntityFacadeImpl implements EntityFacade {
             EntityValue tenantDataSource = null
             EntityList tenantDataSourceXaPropList = null
             if (tenant != null) {
-                logger.info("------------------------------------- if tenant is found in entity  ------------------------------------------------------------------------")
                 tenantDataSource = defaultEfi.find("moqui.tenant.TenantDataSource").condition("tenantId", tenantId)
                         .condition("entityGroupName", groupName).disableAuthz().one()
                 if (tenantDataSource == null) {
-                    logger.info("------------------------------------- No tenant Datasource for this group  ------------------------------------------------------------------------")
                     // if there is no TenantDataSource for this group, look for one for the default-group-name
                     tenantDataSource = defaultEfi.find("moqui.tenant.TenantDataSource").condition("tenantId", tenantId)
                             .condition("entityGroupName", efi.getDefaultGroupName()).disableAuthz().one()
@@ -369,12 +357,10 @@ class EntityFacadeImpl implements EntityFacade {
                 if (serverJndi != null) serverJndi.setSystemExpandAttributes(true)
                 jndiName = tenantDataSource ? tenantDataSource.jndiName : jndiJdbcNode.attribute("jndi-name")
             } else if (xaProperties != null || tenantDataSourceXaPropList) {
-                logger.info("------------------------------------- xa props is not null or tenantDataSourceXaPropList is present  ------------------------------------------------------------------------")
                 xaDsClass = inlineJdbc.attribute("xa-ds-class") ? inlineJdbc.attribute("xa-ds-class") : database.attribute("default-xa-ds-class")
 
                 xaProps = new Properties()
                 if (tenantDataSourceXaPropList) {
-                    logger.info("-------------------------------------  tenantDataSourceXaPropList is present  ------------------------------------------------------------------------")
                     for (EntityValue tenantDataSourceXaProp in tenantDataSourceXaPropList) {
                         // expand all property values from the db
                         String propValue = SystemBinding.expand(tenantDataSourceXaProp.propValue as String)
@@ -383,31 +369,26 @@ class EntityFacadeImpl implements EntityFacade {
                             continue
                         }
                         xaProps.setProperty((String) tenantDataSourceXaProp.propName, propValue)
-                        logger.info("properties ----------------"+tenantDataSourceXaProp.propName+" value == "+propValue)
                     }
                 }
                 // always set default properties for the given data
 
                 if (!tenantDataSourceXaPropList || tenantDataSource?.defaultToConfProps == "Y") {
-                    logger.info("-------------------------------------  using default properties for xs props   ------------------------------------------------------------------------")
                     xaProperties.setSystemExpandAttributes(true)
                     for (String key in xaProperties.attributes.keySet()) {
                         // don't over write existing properties, from tenantDataSourceXaPropList or redundant attributes (shouldn't be allowed)
-                        if (xaProps.containsKey(key)) { logger.info("---------------xa contains  = "+key+"---------------------"); continue}
+                        if (xaProps.containsKey(key)) continue
                         // various H2, Derby, etc properties have a ${moqui.runtime} which is a System property, others may have it too
                         String propValue = xaProperties.attribute(key)
-                        logger.info("---------------new property To be added key = "+key+" value = "+propValue+" ---------------------")
                         if (propValue) xaProps.setProperty(key, propValue)
                     }
 
                     for (String propName in xaProps.stringPropertyNames()) {
                         if (propName.toLowerCase().contains("password")) continue
                         dsDetails.put(propName, xaProps.getProperty(propName))
-                        logger.info("ds details map ----------------"+propName+" value == "+xaProps.getProperty(propName))
                     }
                 }
             } else if (inlineJdbc != null) {
-                logger.info("--------------- Else If Inline running  ---------------------")
                 inlineJdbc.setSystemExpandAttributes(true)
                 jdbcDriver = inlineJdbc.attribute("jdbc-driver") ? inlineJdbc.attribute("jdbc-driver") : database.attribute("default-jdbc-driver")
                 jdbcUri = tenantDataSource ? (String) tenantDataSource.jdbcUri : inlineJdbc.attribute("jdbc-uri")

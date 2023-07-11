@@ -43,7 +43,6 @@ class EntityDatasourceFactoryImpl implements EntityDatasourceFactory {
 
     @Override
     EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode, String tenantId) {
-        logger.info("------------------ Entity Datasource Factory Impl init method  ")
         // local fields
         this.efi = (EntityFacadeImpl) ef
         this.datasourceNode = datasourceNode
@@ -51,7 +50,6 @@ class EntityDatasourceFactoryImpl implements EntityDatasourceFactory {
 
         // init the DataSource
         dsi = new EntityFacadeImpl.DatasourceInfo(efi, datasourceNode)
-        logger.info("------------------ Entity Datasource Factory Impl init method  2 ")
         if (dsi.jndiName != null && !dsi.jndiName.isEmpty()) {
             try {
                 InitialContext ic;
@@ -80,7 +78,6 @@ class EntityDatasourceFactoryImpl implements EntityDatasourceFactory {
                 System.setProperty("derby.system.home", efi.ecfi.runtimePath + "/db/derby")
                 logger.info("Set property derby.system.home to [${System.getProperty("derby.system.home")}]")
             }
-            logger.info("------------------ Entity Datasource Factory Impl init method  3 ")
             TransactionInternal ti = efi.ecfi.transactionFacade.getTransactionInternal()
             // init the DataSource, if it fails for any reason retry a few times
             for (int retry = 1; retry <= DS_RETRY_COUNT; retry++) {
