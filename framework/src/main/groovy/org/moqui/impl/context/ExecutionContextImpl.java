@@ -184,6 +184,7 @@ public class ExecutionContextImpl implements ExecutionContext {
         webFacade = wfi;
         webFacadeImpl = wfi;
 
+        // now that we have the webFacade in place we can do init UserFacade
         String sessionTenantId = (String) request.getSession().getAttribute("moqui.tenantId");
         if (sessionTenantId == null || sessionTenantId.isEmpty()) {
             EntityValue tenantHostDefault = ecfi.defaultEntityFacade.find("moqui.tenant.TenantHostDefault").condition("hostName", wfi.getHostName(false)).useCache(true).disableAuthz().one();

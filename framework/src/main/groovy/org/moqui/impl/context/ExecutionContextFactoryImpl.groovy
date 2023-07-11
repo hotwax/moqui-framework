@@ -236,6 +236,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         logger.info("Screen Facade initialized")
 
         postFacadeInit()
+        
         // Load all tenants in the tenantMap
         ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
         EntityList tenantList = ec.entity.find("moqui.tenant.Tenant").condition('isEnabled', 'Y').disableAuthz().list()
@@ -250,9 +251,8 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         }
         // NOTE: ElasticFacade init after postFacadeInit() so finds embedded from moqui-elasticsearch if present, can move up once moqui-elasticsearch deprecated
 //        elasticFacade = new ElasticFacadeImpl(this)
-        
         logger.info("Elastic Facade initialized")
-        
+
         logger.info("Execution Context Factory initialized in ${(System.currentTimeMillis() - initStartTime)/1000} seconds")
     }
 
@@ -1008,7 +1008,6 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         return efi
     }
 
-
     // ====================================================
     // ========== Main Interface Implementations ==========
     // ====================================================
@@ -1017,7 +1016,6 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     ExecutionContextImpl getEci() {
         // the ExecutionContextImpl cast here looks funny, but avoids Groovy using a slow castToType call
         ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
-//        logger.info("@@@@@@@@ called getEci for tenant "+ec.tenantId);
         if (ec != null) return ec
 
         Thread currentThread = Thread.currentThread()

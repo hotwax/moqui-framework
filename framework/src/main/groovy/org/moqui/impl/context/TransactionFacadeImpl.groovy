@@ -200,7 +200,7 @@ class TransactionFacadeImpl implements TransactionFacade {
             Thread txThread = null
             ExecutionContextImpl eci = ecfi.getEci()
             Throwable threadThrown = null
-            
+
             try {
                 txThread = Thread.start('RequireNewTx', {
                     

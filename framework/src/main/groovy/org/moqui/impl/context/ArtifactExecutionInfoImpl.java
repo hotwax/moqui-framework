@@ -70,7 +70,6 @@ public class ArtifactExecutionInfoImpl implements ArtifactExecutionInfo {
     private long childrenRunningTime = 0;
 
     public ArtifactExecutionInfoImpl(String name, ArtifactType typeEnum, AuthzAction actionEnum, String detail) {
-//        logger.info("------------------ Created object of ArtifactExecutionInfoImpl for = "+name+"-----");
         nameInternal = name;
         internalTypeEnum = typeEnum;
         internalActionEnum = actionEnum != null ? actionEnum : AUTHZA_ALL;

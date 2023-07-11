@@ -149,7 +149,6 @@ class UserFacadeImpl implements UserFacade {
             }
         }
 
-        
         this.visitId = session.getAttribute("moqui.visitId")
         // check for HTTP Basic Authorization for Authentication purposes
         // NOTE: do this even if there is another user logged in, will go on stack
@@ -237,7 +236,6 @@ class UserFacadeImpl implements UserFacade {
                     visitorCookie.setHttpOnly(true)
                     if (request.isSecure()) visitorCookie.setSecure(true)
                     response.addCookie(visitorCookie)
-                    logger.info("----------- setting in seeion "+cookieVisitorId.toString()+"------------------")
                     session.setAttribute("moqui.visitorId", cookieVisitorId)
                 }
             }
@@ -751,7 +749,6 @@ class UserFacadeImpl implements UserFacade {
     }
 
     void logoutLocal() {
-        logger.info(" -------------- logout local called ----------------------")
         // before logout trigger the before-logout actions
         if (eci.getWebImpl() != null) eci.getWebImpl().runBeforeLogoutActions()
 
@@ -765,7 +762,6 @@ class UserFacadeImpl implements UserFacade {
     }
 
     @Override void logoutUser() {
-        logger.info(" -------------- logout user called ----------------------")
         String userId = getUserId()
         // if userId set hasLoggedOut
         if (userId != null && !userId.isEmpty()) {
@@ -1009,7 +1005,7 @@ class UserFacadeImpl implements UserFacade {
 
         // logger.info("UserFacade popped tenant: ${wasInfo.tenantId} to ${currentInfo.tenantId}, user was ${wasInfo.username} and is ${currentInfo.username}")
     }
-    
+
     static String getClientIp(HttpServletRequest httpRequest, HandshakeRequest handshakeRequest, ExecutionContextFactoryImpl ecfi) {
         // use configured client-ip-header to support more than the unreliable X-Forwarded-For header
         String webappName = null
@@ -1109,7 +1105,7 @@ class UserFacadeImpl implements UserFacade {
 
             this.username = username
             this.tenantId = tenantId ?: ufi.eci.tenantId
-            
+
             EntityValueBase ua = (EntityValueBase) null
             if (username != null && username.length() > 0) {
                 EntityCondition usernameCond = ufi.eci.entityFacade.getConditionFactory()

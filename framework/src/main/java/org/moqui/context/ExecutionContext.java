@@ -58,7 +58,6 @@ public interface ExecutionContext {
     @Nonnull String getTenantId();
     @Nonnull EntityValue getTenant();
 
-
     /** If running through a web (HTTP servlet) request offers access to the various web objects/information.
      * If not running in a web context will return null.
      */

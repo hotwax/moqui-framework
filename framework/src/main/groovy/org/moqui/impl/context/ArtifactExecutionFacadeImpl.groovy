@@ -82,6 +82,7 @@ class ArtifactExecutionFacadeImpl implements ArtifactExecutionFacade {
     }
     void pushInternal(ArtifactExecutionInfoImpl aeii, boolean requiresAuthz, boolean countTarpit) {
         ArtifactExecutionInfoImpl lastAeii = (ArtifactExecutionInfoImpl) artifactExecutionInfoStack.peekFirst()
+        
         // always do this regardless of the authz checks, etc; keep a history of artifacts run
         if (lastAeii != null) { lastAeii.addChild(aeii); aeii.setParent(lastAeii) }
         else artifactExecutionInfoHistory.add(aeii)
@@ -522,7 +523,7 @@ class ArtifactExecutionFacadeImpl implements ArtifactExecutionFacade {
 
                 // check the ArtifactTarpitLock for the current artifact attempt before seeing if there is a new lock to create
                 // NOTE: this only runs if we are recording a hit time for an artifact, so no performance impact otherwise
-                EntityFacadeImpl efi = ecfi.getEntityFacade(eci.tenantId)   
+                EntityFacadeImpl efi = ecfi.getEntityFacade(eci.tenantId)
                 EntityList tarpitLockList = efi.find('moqui.security.ArtifactTarpitLock')
                         .condition([userId:userId, artifactName:aeii.getName(), artifactTypeEnumId:artifactTypeEnum.name()] as Map<String, Object>)
                         .useCache(true).list()

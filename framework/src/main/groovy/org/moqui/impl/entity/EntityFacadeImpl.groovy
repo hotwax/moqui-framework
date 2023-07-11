@@ -120,7 +120,7 @@ class EntityFacadeImpl implements EntityFacade {
         defaultGroupName = entityFacadeNode.attribute("default-group-name")
         sequencedIdPrefix = entityFacadeNode.attribute("sequenced-id-prefix") ?: null
         queryStats = entityFacadeNode.attribute("query-stats") == "true"
-        
+
         TimeZone theTimeZone = null
         if (entityFacadeNode.attribute("database-time-zone")) {
             try {
@@ -145,7 +145,6 @@ class EntityFacadeImpl implements EntityFacade {
         
         // NOTE: don't try to load entity locations before constructor is complete; this.loadAllEntityLocations()
         entitySequenceBankCache = ecfi.cacheFacade.getCache("entity.sequence.bank", this.tenantId)
-        
 
         // init connection pool (DataSource) for each group
         initAllDatasources()
@@ -155,7 +154,6 @@ class EntityFacadeImpl implements EntityFacade {
 
         emptyList = new EntityListImpl(this)
         emptyList.setFromCache()
-        
     }
     void postFacadeInit() {
         // ========== load a few things in advance so first page hit is faster in production (in dev mode will reload anyway as caches timeout)
@@ -164,7 +162,7 @@ class EntityFacadeImpl implements EntityFacade {
         long entityStartTime = System.currentTimeMillis()
         EntityFacadeImpl defaultEfi = ecfi.defaultEntityFacade
         defaultEfi.loadAllEntityLocations()
-        
+
         int entityCount = defaultEfi.loadAllEntityDefinitions()
         // don't always load/warm framework entities, in production warms anyway and in dev not needed: entityFacade.loadFrameworkEntities()
         logger.info("Loaded ${entityCount} entity definitions in ${System.currentTimeMillis() - entityStartTime}ms")
@@ -286,9 +284,9 @@ class EntityFacadeImpl implements EntityFacade {
 
     protected void initAllDatasources() {
         for (MNode datasourceNode in getEntityFacadeNode().children("datasource")) {
-            
             datasourceNode.setSystemExpandAttributes(true)
             String groupName = datasourceNode.attribute("group-name")
+
             if ("true".equals(datasourceNode.attribute("disabled"))) {
                 logger.info("Skipping disabled datasource ${groupName}")
                 continue
@@ -1182,7 +1180,6 @@ class EntityFacadeImpl implements EntityFacade {
             if (ed == null) continue
             if (excludeViewEntities && ed.isViewEntity) continue
             if (excludeTenantCommon && ed.getEntityGroupName() == "tenantcommon") continue
-            
             if (masterEntitiesOnly) {
                 if (!(ed.entityNode.attribute("has-dependents") == "true") || en.endsWith("Type") ||
                         en == "moqui.basic.Enumeration" || en == "moqui.basic.StatusItem") continue
@@ -2091,7 +2088,6 @@ class EntityFacadeImpl implements EntityFacade {
 
         Connection stashed = tfi.getTxConnection(tenantId, groupToUse)
         if (stashed != null) return stashed
-//logger.info("------------------------- get connection ------------------------------------")
         EntityDatasourceFactory edf = getDatasourceFactory(groupToUse)
         DataSource ds = edf.getDataSource()
         if (ds == null) throw new EntityException("Cannot get JDBC Connection for group-name [${groupToUse}] because it has no DataSource")

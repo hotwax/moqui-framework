@@ -346,6 +346,7 @@ class ElasticFacadeImpl implements ElasticFacade {
         @Override
         void bulk(String index, List<Map> actionSourceList) {
             if (actionSourceList == null || actionSourceList.size() == 0) return
+            
             RestClient.RestResponse response = bulkResponse(index, actionSourceList, false)
             checkResponse(response, "Bulk operations", index)
         }
@@ -366,7 +367,6 @@ class ElasticFacadeImpl implements ElasticFacade {
                 jacksonMapper.writeValue(bodyWriter, entry)
                 bodyWriter.append((char) '\n')
             }
-            
             RestClient restClient = makeRestClient(Method.POST, index, "_bulk", [refresh:(refresh ? "true" : "wait_for")])
                     .contentType("application/x-ndjson")
             restClient.timeout(600)
@@ -558,9 +558,6 @@ class ElasticFacadeImpl implements ElasticFacade {
             return makeRestClient(method, index, path, parameters, null)
         }
         RestClient makeRestClient(Method method, String index, String path, Map<String, String> parameters, Integer timeout) {
-//            if(!index.contains(ecfi.eci.tenantId)){
-//                index = ecfi.eci.tenantId.toLowerCase()+"__"+index   
-//            }
             // NOTE: don't use logger in this method, with ElasticSearchLogger in place results in infinite log feedback
             String serverIndex = prefixIndexName(index)
             // System.out.println("=== ES call index ${serverIndex} path ${path} parameters ${parameters}")

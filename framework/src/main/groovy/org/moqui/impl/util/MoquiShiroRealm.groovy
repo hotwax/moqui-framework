@@ -208,6 +208,7 @@ class MoquiShiroRealm implements Realm, Authorizer {
                 logger.warn("Error resetting UserAccount login status", e)
             }
         }
+
         // update visit if no user in visit yet
         String visitId = eci.userFacade.getVisitId()
         EntityValue visit = eci.entityFacade.find("moqui.server.Visit").condition("visitId", visitId).disableAuthz().one()

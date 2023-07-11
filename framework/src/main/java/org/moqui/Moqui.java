@@ -114,7 +114,6 @@ public class Moqui {
      * @param argMap Arguments, generally from command line, to configure this data load.
      */
     public static void loadData(Map<String, String> argMap) {
-        logger.info("+++++++++++++++++++++++ running load data ++++++++++++++++++++++++++");
         if (argMap.containsKey("raw") || argMap.containsKey("no-fk-create"))
             System.setProperty("entity_disable_fk_create", "true");
 

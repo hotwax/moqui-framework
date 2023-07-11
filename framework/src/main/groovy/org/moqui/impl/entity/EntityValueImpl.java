@@ -62,6 +62,7 @@ public class EntityValueImpl extends EntityValueBase {
         EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
         StringBuilder sql = eqb.sqlTopLevel;
         sql.append("INSERT INTO ").append(ed.getFullTableName()).append(" (");
+
         int size = fieldInfoArray.length;
         StringBuilder values = new StringBuilder(size*3);
 
@@ -78,6 +79,7 @@ public class EntityValueImpl extends EntityValueBase {
         }
 
         sql.append(") VALUES (").append(values.toString()).append(")");
+
         try {
             efi.getEntityDbMeta().checkTableRuntime(ed);
 
@@ -111,10 +113,12 @@ public class EntityValueImpl extends EntityValueBase {
         EntityDefinition ed = getEntityDefinition();
         final EntityFacadeImpl efi = getEntityFacadeImpl();
         if (ed.isViewEntity) throw new EntityException("Update not yet implemented for view-entity");
+
         final EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
         ArrayList<EntityConditionParameter> parameters = eqb.parameters;
         StringBuilder sql = eqb.sqlTopLevel;
         sql.append("UPDATE ").append(ed.getFullTableName()).append(" SET ");
+
         int size = nonPkFieldArray.length;
         for (int i = 0; i < size; i++) {
             FieldInfo fieldInfo = nonPkFieldArray[i];
@@ -128,7 +132,7 @@ public class EntityValueImpl extends EntityValueBase {
 
         try {
             efi.getEntityDbMeta().checkTableRuntime(ed);
-            
+
             if(con != null) eqb.useConnection(con);
             else eqb.makeConnection(false);
             eqb.makePreparedStatement();

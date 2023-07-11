@@ -56,7 +56,6 @@ class MoquiSessionListener implements HttpSessionListener, HttpSessionAttributeL
             if (logger.traceEnabled) logger.trace("Not closing visit for session ${sessionId}, no value for visitId session attribute")
             return
         }
-        logger.info("+++++++++++++++oooooooooooooooooooooooooo Session deestroyed clsoe visit  ooooooooooooooooooooooooooooooooo")
         closeVisit(visitId, sessionId)
     }
     @Override void attributeAdded(HttpSessionBindingEvent event) {
@@ -81,7 +80,6 @@ class MoquiSessionListener implements HttpSessionListener, HttpSessionAttributeL
                 if (logger.traceEnabled) logger.trace("Not closing visit for session ${sessionId}, no value for removed moqui.visitId session attribute")
                 return
             }
-            logger.info("+++++++++++++++oooooooooooooooooooooooooo Attribute removed  clsoe visit  ooooooooooooooooooooooooooooooooo")
             closeVisit(visitId, sessionId)
         }
     }
@@ -91,17 +89,12 @@ class MoquiSessionListener implements HttpSessionListener, HttpSessionAttributeL
 
         // set thruDate on Visit
         Timestamp thruDate = new Timestamp(System.currentTimeMillis())
-//        logger.info("+++++++++++++++oooooooooooooooooooooooooo closing previous visit ooooooooooooooooooooooooooooooooo")
-//        logger.info("+++++++++++++++oooooooooooooooooooooooooo running for id  "+visitId+" ooooooooooooooooooooooooooooooooo")
-//        Map<String, Object> visitMap = ecfi.serviceFacade.sync().name("get", "moqui.server.Visit").parameter("visitId", visitId).parameter("thruDate", thruDate)
-//                .disableAuthz().call()
         EntityList visitList = ecfi.entityFacade.find("moqui.server.Visit")
                 .condition("visitId", visitId).disableAuthz().list()
         
         if(!visitList.isEmpty()){
             if(visitList.getFirst().getString("visitId")==visitId) 
             {
-                logger.info("+++++++++++++++oooooooooooooooooooooooooo list is not empty ooooooooooooooooooooooooooooooooo")
                 ecfi.serviceFacade.sync().name("update", "moqui.server.Visit").parameter("visitId", visitId).parameter("thruDate", thruDate)
                         .disableAuthz().call()
                 if (logger.traceEnabled) logger.trace("Closed visit ${visitId} at ${thruDate} for session ${sessionId}")
