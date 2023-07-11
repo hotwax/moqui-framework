@@ -206,7 +206,6 @@ public class ExecutionContextImpl implements ExecutionContext {
 
         String userId = userFacade.getUserId();
         if (userId != null && !userId.isEmpty()) MDC.put("moqui_userId", userId);
-        loggerDirect.info("------------------- Visitor Id in Execution Context Impl, getting from user Facade = "+userFacade.getVisitorId()+"---------------------------------------");
         String visitorId = userFacade.getVisitorId();
         if (visitorId != null && !visitorId.isEmpty()) MDC.put("moqui_visitorId", visitorId);
 

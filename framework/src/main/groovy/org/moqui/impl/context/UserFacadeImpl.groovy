@@ -98,8 +98,8 @@ class UserFacadeImpl implements UserFacade {
 
         String queryString = request.getQueryString();
         String queryTenantId = request.getParameter("tenantId");
-            logger.info("----------- query string = "+queryString+"------------------")
-            logger.info("----------- query tenant ID  = "+queryTenantId+"------------------")
+//        Get tenant Id from request parmas
+//            logger.info("----------- query tenant ID  = "+queryTenantId+"------------------")
         
 //        Get tenant Id from sub-domain ex tenant1.myapp.co
         logger.info("----------- Sub domain  = "+request.getServerName().split("\\.")[0]+"------------------")
@@ -151,7 +151,6 @@ class UserFacadeImpl implements UserFacade {
 
         
         this.visitId = session.getAttribute("moqui.visitId")
-        logger.info("----------- Received visit Id from session attribute = "+session.getAttribute("moqui.visitId")+"------------------")
         // check for HTTP Basic Authorization for Authentication purposes
         // NOTE: do this even if there is another user logged in, will go on stack
         Map secureParameters = eci.webImpl != null ? eci.webImpl.getSecureRequestParameters() :
@@ -205,7 +204,6 @@ class UserFacadeImpl implements UserFacade {
             // handle visitorId and cookie
             String cookieVisitorId = (String) null
             if (!isJustContent && !"false".equals(serverStatsNode.attribute('visitor-enabled'))) {
-                logger.info("-------------------- if visitor enabled -------------------------------")
                 Cookie[] cookies = request.getCookies()
                 if (cookies != null) {
                     for (int i = 0; i < cookies.length; i++) {
@@ -216,7 +214,6 @@ class UserFacadeImpl implements UserFacade {
                     }
                 }
                 if (cookieVisitorId) {
-                    logger.info("-------------------- if visitor cookie exists -------------------------------")
                     // make sure the Visitor record actually exists, if not act like we got no moqui.visitor cookie
                     EntityValue visitor = eci.entity.find("moqui.server.Visitor").condition("visitorId", cookieVisitorId).disableAuthz().one()
                     if (visitor == null) {
@@ -225,8 +222,6 @@ class UserFacadeImpl implements UserFacade {
                     }
                 }
                 if (!cookieVisitorId) {
-                    logger.info("----------- Create a new cookie------------------")
-                    logger.info("--------------------- using tenant -- "+eci.tenantId+"----------------------------")
                     // NOTE: disable authz for this call, don't normally want to allow create of Visitor, but this is a special case
                     Map cvResult = eci.service.sync().name("create", "moqui.server.Visitor")
                             .parameter("createdDate", getNowTimestamp()).disableAuthz().call()
@@ -268,11 +263,9 @@ class UserFacadeImpl implements UserFacade {
                 parameters.serverHostName = address?.getHostName() ?: "localhost"
                 parameters.clientIpAddress = clientIpInternal
                 if (cookieVisitorId) parameters.visitorId = cookieVisitorId
-                logger.info("----------- Creating visit id  for tenant "+eci.tenantId+"------------------")
                 // NOTE: disable authz for this call, don't normally want to allow create of Visit, but this is special case
                 Map visitResult = eci.service.sync().name("create", "moqui.server.Visit").parameters(parameters)
                         .disableAuthz().call()
-                logger.info("----------- Created  visit id  for tenant "+eci.tenantId+" ID is = "+visitResult.visitId.toString()+"------------------")
                 // put visitId in session as "moqui.visitId"
                 if (visitResult) {
                     session.setAttribute("moqui.visitId", visitResult.visitId)
