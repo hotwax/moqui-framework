@@ -238,7 +238,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
         postFacadeInit()
         // Load all tenants in the tenantMap
         ExecutionContextImpl ec = (ExecutionContextImpl) activeContext.get()
-        EntityList tenantList = ec.entity.find("moqui.tenant.Tenant").disableAuthz().list()
+        EntityList tenantList = ec.entity.find("moqui.tenant.Tenant").condition('isEnabled', 'Y').disableAuthz().list()
         for (EntityValue tenant in tenantList) {
             String tenantId=tenant.tenantId;
             initEntityFacade(tenantId);
@@ -993,9 +993,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     Collection<EntityFacadeImpl> getAllEntityFacades() { entityFacadeByTenantMap.values() }
     EntityFacadeImpl getEntityFacade() { return getEci().getEntityFacade() }
     EntityFacadeImpl getEntityFacade(@Nonnull String tenantId) {
-//        logger.info("Called get entity facade ------------------------------------- 5")
         EntityFacadeImpl efi = (EntityFacadeImpl) entityFacadeByTenantMap.get(tenantId)
-//        logger.info("Called get entity facade ------------------------------------ 6")
         if (efi == null) efi = initEntityFacade(tenantId)
 
         return efi
