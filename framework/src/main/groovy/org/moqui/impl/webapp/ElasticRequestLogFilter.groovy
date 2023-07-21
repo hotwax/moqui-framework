@@ -50,9 +50,7 @@ class ElasticRequestLogFilter implements Filter {
 
         ecfi = (ExecutionContextFactoryImpl) filterConfig.servletContext.getAttribute("executionContextFactory")
         if (ecfi == null) ecfi = (ExecutionContextFactoryImpl) Moqui.executionContextFactory
-        if(ecfi.elasticFacade!=null) {
             elasticClient = (ElasticClientImpl) (ecfi.elasticFacade.getClient("logger") ?: ecfi.elasticFacade.getDefault())
-        }
         if (elasticClient == null) {
             logger.error("In ElasticRequestLogFilter init could not find ElasticClient with name logger or default, not starting")
             return
