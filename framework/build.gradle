@@ -31,6 +31,10 @@ buildscript {
         // uncomment to add the Error Prone compiler: classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.8'
     }
 }
+ dependencies {
+     runtimeOnly 'mysql:mysql-connector-java:8.0.30'
+ }
+
 dependencyUpdates.resolutionStrategy { componentSelection { rules -> rules.all { ComponentSelection selection ->
     boolean rejected = ['alpha', 'beta', 'rc', 'cr', 'm', 'b'].any { qualifier -> selection.candidate.version ==~ /(?i).*[.-]${qualifier}[.\d-].*/ }
     if (rejected) selection.reject('Release candidate')
