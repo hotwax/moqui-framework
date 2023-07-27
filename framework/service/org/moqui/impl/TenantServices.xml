@@ -334,6 +334,8 @@ along with this software (see the LICENSE.md file). If not, see
         <actions>
             <set field="datasourceNode" from="ec.entity.getDatasourceNode('transactional')"/>
             <set field="xaProperties" from="datasourceNode.first('inline-jdbc').first('xa-properties')"/>
+            <set field="dbHost" from="xaProperties.attribute('serverName')"/>
+            <set field="dbPort" from="xaProperties.attribute('port')"/>
             <if condition="!dbUser"><set field="dbUser" from="xaProperties ? xaProperties.attribute('user') : 'moqui'"/></if>
             <if condition="!dbPassword"><set field="dbPassword" from="xaProperties ? xaProperties.attribute('password') : 'moqui'"/></if>
             <!-- Run this in a separate TX so the records are committed before we try to activate the tenant -->
@@ -350,7 +352,7 @@ along with this software (see the LICENSE.md file). If not, see
 <!--                        in-map="[tenantId:tenantId, entityGroupName:'transactional', propName:'databaseName', propValue:dbName]"/>-->
             <service-call name="create#moqui.tenant.TenantDataSourceXaProp"
                           in-map="[tenantId:tenantId, entityGroupName:'transactional', propName:'url',
-                            propValue:('jdbc:mysql://localhost:3306/' + dbName)]"/>
+                            propValue:('jdbc:mysql://'+ dbHost +':'+ dbPort +'/' + dbName)]"/>
                 <service-call name="create#moqui.tenant.TenantDataSourceXaProp"
                         in-map="[tenantId:tenantId, entityGroupName:'transactional', propName:'user', propValue:dbUser]"/>
                 <service-call name="create#moqui.tenant.TenantDataSourceXaProp"
