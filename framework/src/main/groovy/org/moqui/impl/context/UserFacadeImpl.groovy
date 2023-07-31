@@ -101,9 +101,6 @@ class UserFacadeImpl implements UserFacade {
 //        Get tenant Id from request parmas
 //            logger.info("----------- query tenant ID  = "+queryTenantId+"------------------")
         
-//        Get tenant Id from sub-domain ex tenant1.myapp.co
-        logger.info("----------- Sub domain  = "+request.getServerName().split("\\.")[0]+"------------------")
-        
         // get client IP address, handle proxy upstream address if added in a header
         clientIpInternal = getClientIp(request, null, eci.ecfi)
 
