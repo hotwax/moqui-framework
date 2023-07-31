@@ -106,14 +106,11 @@ along with this software (see the LICENSE.md file). If not, see
 
                 ExecutionContext ec = context.ec
                 // switch to new Tenant
-                ec.logger.info ("------------------------------------- changing tenant  ")
-                ec.changeTenant(tenantId)
-                ec.logger.info ("------------------------------------- tenant chagned ")                
+                ec.changeTenant(tenantId)                
                 // auth anonymous user, turn off authz for data loading
                 ec.getUser().loginAnonymousIfNoUser()
                 System.setProperty("entity_disable_fk_create", "true");
                 ec.getArtifactExecution().disableAuthz()
-                ec.logger.info ("------------------------------------- auth disable  ")
                 ArtifactExecutionInfoImpl aei = new ArtifactExecutionInfoImpl("loadData",
                         ArtifactExecutionInfoImpl.AT_OTHER, ArtifactExecutionInfoImpl.AUTHZA_ALL, null)
                 ec.getArtifactExecution().push(aei, false)
@@ -125,23 +122,19 @@ along with this software (see the LICENSE.md file). If not, see
                     if (dataLoadTypes && dataLoadTypes != 'all') edl.dataTypes(new HashSet(Arrays.asList(dataLoadTypes.split(","))))
                     long startTime = System.currentTimeMillis()
                     records = edl.load()
-                    ec.logger.info ("------------------------------------- edl load done  ")
                     totalSeconds = (System.currentTimeMillis() - startTime) / 1000
 
                     String loadMessage = ec.resource.expand('Loaded ${records} records in tenant ${tenantId} in ${totalSeconds} seconds for data types: ${dataLoadTypes}','')
-                    ec.logger.info ("------------------------------------- load records in tenant   ")
                     ec.message.addMessage(loadMessage)
                     ec.logger.info(loadMessage)
 
                     // create admin user
-                    ec.logger.info ("------------------------------------- creating admin user    ")
                     context.putAll(ec.service.sync().name("org.moqui.impl.UserServices.create#UserAccount").parameters(context).call())
                     // add to admin UserGroup
                     ec.service.sync().name("create#moqui.security.UserGroupMember").parameters([userId:userId, userGroupId:'ADMIN']).call()
                     ec.logger.info("Created user ${username} in ADMIN group.")
                 } finally {
                     // turn authz back on, etc
-                    ec.logger.info ("------------------------------------- finally block    ")
                     ec.getUser().logoutAnonymousOnly()
                     ec.getArtifactExecution().pop(aei)
                     ec.getArtifactExecution().enableAuthz()
