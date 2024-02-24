@@ -420,7 +420,13 @@ class EntityDbMeta {
         } else {
             String groupName = ed.getEntityGroupName()
             boolean beganTx = useTxForMetaData ? efi.ecfi.transactionFacade.begin(5) : false
-            try (Connection con = efi.getConnection(groupName)) {
+            try {
+                try {
+                    con = efi.getConnection(groupName)
+                } catch (EntityException ee) {
+                    logger.warn("Could not get connection so treating entity ${ed.fullEntityName} in group ${groupName} as table does not exist: ${ee.toString()}")
+                    return false
+                }
                 DatabaseMetaData dbData = con.getMetaData()
 
                 String[] types = ["TABLE", "VIEW", "ALIAS", "SYNONYM", "PARTITIONED TABLE"]
