@@ -901,6 +901,8 @@ task createComponent {
                 print "\n\n"
                 println "Select rest api (r), screens (s), or both (B):"
                 def componentInput = System.in.newReader().readLine()
+                logger.warn("componentInput: ${componentInput}")
+                logger.warn("componentInput: ${componentInput == ''}")
 
                 if (componentInput == 'r') {
                     new File(newComponent, 'screen').deleteDir()
@@ -948,21 +950,19 @@ task createComponent {
 
                     def grgit = Grgit.init(dir: newComponent.path)
                     grgit.add(patterns: ['.'])
-                    // Can't get signing to work easily. If signing works well then might as well commit
-//                    grgit.commit(message: 'Initial commit')
+//                    grgit.commit(message: 'Initial commit', sign: false)
                     println "Selected yes, so git is initialized\n"
-                    println "To setup the git remote origin, type the git remote url or enter to skip"
-                    def remoteUrl = System.in.newReader().readLine()
-                    if (remoteUrl != '') {
-                        grgit.remote.add(name: 'origin', url: remoteUrl)
-                        println "Run the following to push the git repository:\ncd runtime/component/${component} && git commit -m 'Initial commit' && git push && cd ../../.."
-                    } else {
-                        println "Run the following to push the git repository:\ncd runtime/component/${component} && git commit -m 'Initial commit' && git remote add origin git@github.com:yourgroup/${component} && git push && cd ../../.."
-                    }
+//                    println "To push to remote repository, type the git remote url or enter to skip"
+//                    def remoteUrl = System.in.newReader().readLine()
+//                    if (remoteUrl != '') {
+//                        grgit.remote.add(name: 'origin', url: remoteUrl)
+//                        def branch = grgit.branch.current().name
+//                        grgit.push(remote: 'origin', refsOrSpecs: [':refs/branch/'+branch])
+//                    }
                 } else if (gitInput == 'n' || gitInput == 'N') {
                     new File(newComponent, '.git').deleteDir()
                     println "Selected no, so git is not initialized\n"
-                    println "Run the following to push the git repository:\ncd runtime/component/${component} && git commit -m 'Initial commit' && git remote add origin git@github.com:yourgroup/${component} && git push && cd ../../.."
+                    println "Run the following to initialize git repository:\ncd runtime/component/${component} && git init && git add . && git commit -m 'Initial commit' && cd ../../.."
                 } else {
                     println "Invalid input. Try again"
                     newComponent.deleteDir()
@@ -975,14 +975,14 @@ task createComponent {
                     def myaddonsFile = file('myaddons.xml')
                     if (myaddonsFile.exists()){
                         // Iterate through myaddons file and delete the lines that are </addons>
-                        // Read the lines from the file
-                        def lines = myaddonsFile.readLines()
+                        def iterator = myaddonsFile.readLines().iterator()
 
-                        // Filter out the lines that contain </addons>
-                        def filteredLines = lines.findAll { !it.contains("</addons>") }
-
-                        // Write the filtered lines back to the file
-                        myaddonsFile.text = filteredLines.join('\n')
+                        while (iterator.hasNext()) {
+                            def line = iterator.next()
+                            if (line.contains("</addons>")) {
+                                iterator.remove()
+                            }
+                        }
                     } else {
                         println "myaddons.xml not found. Creating one\nEnter repository github (g), github-ssh (GS), bitbucket (b), or bitbucket-ssh (bs)"
                         def repositoryInput = System.in.newReader().readLine()
