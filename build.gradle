@@ -901,8 +901,6 @@ task createComponent {
                 print "\n\n"
                 println "Select rest api (r), screens (s), or both (B):"
                 def componentInput = System.in.newReader().readLine()
-                logger.warn("componentInput: ${componentInput}")
-                logger.warn("componentInput: ${componentInput == ''}")
 
                 if (componentInput == 'r') {
                     new File(newComponent, 'screen').deleteDir()
