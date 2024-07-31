@@ -14,8 +14,7 @@ build
 /docker/runtime
 /docker/db
 /docker/elasticsearch/data/nodes
-/docker/opensearch/data/nodes/*
-!/docker/opensearch/data/nodes/README
+/docker/opensearch/data/nodes
 /docker/acme.sh
 /docker/nginx/conf.d
 /docker/nginx/vhost.d
