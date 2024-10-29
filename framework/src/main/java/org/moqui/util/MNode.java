@@ -54,11 +54,14 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
         String location = rr.getLocation();
         MNode cached = parsedNodeCache.get(location);
         if (cached != null && cached.lastModified >= rr.getLastModified()) return cached;
-
-        MNode node = parse(location, rr.openStream());
+        try (InputStream is = rr.openStream()) {
+        MNode node = parse(location, is);
         node.lastModified = rr.getLastModified();
         if (node.lastModified > 0) parsedNodeCache.put(location, node);
         return node;
+        } catch (IOException e) {
+            throw new BaseException(e);
+        }
     }
     /** Parse from an InputStream and close the stream */
     public static MNode parse(String location, InputStream is) throws BaseException {
@@ -69,9 +72,6 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
         } catch (IOException e) {
             logger.error("Error closing XML stream from " + location, e);
             throw new BaseException("Error parsing XML stream from " + location, e);
-        } finally {
-            try { is.close(); }
-            catch (IOException e) { logger.error("Error closing XML stream from " + location, e); }
         }
     }
     public static MNode parse(File fl) throws BaseException {

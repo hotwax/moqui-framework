@@ -301,9 +301,11 @@ class ScreenFacadeImpl implements ScreenFacade {
     protected synchronized MNode makeWidgetTemplatesNodeByLocation(String templateLocation) {
         MNode templatesNode = (MNode) widgetTemplateLocationCache.get(templateLocation)
         if (templatesNode != null) return templatesNode
-
-        templatesNode = MNode.parse(templateLocation, ecfi.resourceFacade.getLocationStream(templateLocation))
+        try (InputStream is = ecfi.resourceFacade.getLocationStream(templateLocation)) {
+        templatesNode = MNode.parse(templateLocation, is)
         widgetTemplateLocationCache.put(templateLocation, templatesNode)
+        }
+
         return templatesNode
     }
 
