@@ -191,60 +191,16 @@ class EntityDynamicViewImpl implements EntityDynamicView {
         }
         return this
     }
-
-    EntityDynamicView addWhereConditions(List<Map<String, Object>> conditions) {
+    EntityDynamicView addWhereConditions(List<Map<String, String>> conditions) {
         if (!conditions || conditions.isEmpty()) return this
-
         String nodeName = "entity-condition"
         if (!entityNode.hasChild(nodeName)) {
             entityNode.append(nodeName, null)
         }
         MNode conditionNode = entityNode.first(nodeName)
-
         conditions.each { cond ->
-            if (cond.isEmpty()) return
-
-            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
-                MNode econditionsNode = conditionNode.append("econditions", ["combine": cond["combine"]] as Map<String, String>)
-                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
-                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
-                }
-            } else {
-                conditionNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
-            }
+            conditionNode.append("econdition", ["entity-alias": cond["entity-alias"] ?: "", "field-name"  : cond["field-name"] ?: "", "operator"    : cond["operator"] ?: "equals", "value"       : cond["value"] ?: ""] as Map<String, String>)
         }
-
-        return this
-    }
-
-    EntityDynamicView addHavingConditions(List<Map<String, Object>> havingConditions) {
-        if (!havingConditions || havingConditions.isEmpty()) return this
-
-        String nodeName = "entity-condition"
-        if (!entityNode.hasChild(nodeName)) {
-            entityNode.append(nodeName, null)
-        }
-        MNode conditionNode = entityNode.first(nodeName)
-        Map<String, Object> firstCondition = havingConditions[0]
-        MNode havingNode
-        if (firstCondition.containsKey("combine")) {
-            havingNode = conditionNode.append("having-econditions", ["combine": firstCondition["combine"].toString()])
-            havingConditions = havingConditions.subList(1, havingConditions.size())
-        } else {
-            havingNode = conditionNode.append("having-econditions", null)
-        }
-        havingConditions.each { cond ->
-            if (cond.isEmpty()) return
-            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
-                MNode econditionsNode = havingNode.append("econditions", ["combine": cond["combine"].toString()])
-                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
-                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
-                }
-            } else {
-                havingNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
-            }
-        }
-
         return this
     }
 }
