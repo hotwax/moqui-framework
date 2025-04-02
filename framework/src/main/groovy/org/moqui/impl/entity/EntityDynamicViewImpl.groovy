@@ -1,12 +1,12 @@
 /*
- * This software is in the public domain under CC0 1.0 Universal plus a 
+ * This software is in the public domain under CC0 1.0 Universal plus a
  * Grant of Patent License.
- * 
+ *
  * To the extent possible under law, the author(s) have dedicated all
  * copyright and related and neighboring rights to this software to the
  * public domain worldwide. This software is distributed without any
  * warranty.
- * 
+ *
  * You should have received a copy of the CC0 Public Domain Dedication
  * along with this software (see the LICENSE.md file). If not, see
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
@@ -30,7 +30,6 @@ class EntityDynamicViewImpl implements EntityDynamicView {
     EntityDynamicViewImpl(EntityFacadeImpl efi) { this.efi = efi }
 
     EntityDefinition makeEntityDefinition() {
-        // System.out.println("========= MNode:\n${entityNode.toString()}")
         return new EntityDefinition(efi, entityNode)
     }
 
@@ -83,30 +82,6 @@ class EntityDynamicViewImpl implements EntityDynamicView {
                 if (condition.containsKey("date-filter")) {
                     entityCondition.append("date-filter", null)
                 }
-            }
-        }
-        // Handle subSelect
-        if (subSelect) {
-            memberEntity.attributes.put("sub-select", subSelect)
-        }
-
-        return this
-    }
-    EntityDynamicView addMemberEntity(String entityAlias, String entityName, String joinFromAlias, Boolean joinOptional,
-                                      Map<String, String> entityKeyMaps, Map<String, String> entityConditions, String subSelect) {
-        MNode memberEntity = entityNode.append("member-entity", ["entity-alias":entityAlias, "entity-name":entityName])
-        if (joinFromAlias) {
-            memberEntity.attributes.put("join-from-alias", joinFromAlias)
-            memberEntity.attributes.put("join-optional", (joinOptional ? "true" : "false"))
-        }
-        if (entityKeyMaps) for (Map.Entry<String, String> keyMapEntry in entityKeyMaps.entrySet()) {
-            memberEntity.append("key-map", ["field-name":keyMapEntry.getKey(), "related":keyMapEntry.getValue()])
-        }
-        // Add entity-condition if provided
-        if (entityConditions && !entityConditions.isEmpty()) {
-            MNode entityCondition = memberEntity.append("entity-condition", null)
-            for (Map.Entry<String, String> keyValueEntry in entityConditions.entrySet()) {
-                entityCondition.append("econdition", ["entity-alias": entityAlias, "field-name": keyValueEntry.getKey(), "value": keyValueEntry.getValue()])
             }
         }
         // Handle subSelect
@@ -189,6 +164,62 @@ class EntityDynamicViewImpl implements EntityDynamicView {
         for (Map.Entry<String, String> keyMapEntry in entityKeyMaps.entrySet()) {
             viewLink.append("key-map", ["field-name":keyMapEntry.getKey(), "related":keyMapEntry.getValue()])
         }
+        return this
+    }
+
+    EntityDynamicView addWhereConditions(List<Map<String, Object>> conditions) {
+        if (!conditions || conditions.isEmpty()) return this
+
+        String nodeName = "entity-condition"
+        if (!entityNode.hasChild(nodeName)) {
+            entityNode.append(nodeName, null)
+        }
+        MNode conditionNode = entityNode.first(nodeName)
+
+        conditions.each { cond ->
+            if (cond.isEmpty()) return
+
+            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
+                MNode econditionsNode = conditionNode.append("econditions", ["combine": cond["combine"]] as Map<String, String>)
+                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
+                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
+                }
+            } else {
+                conditionNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
+            }
+        }
+
+        return this
+    }
+
+    EntityDynamicView addHavingConditions(List<Map<String, Object>> havingConditions) {
+        if (!havingConditions || havingConditions.isEmpty()) return this
+
+        String nodeName = "entity-condition"
+        if (!entityNode.hasChild(nodeName)) {
+            entityNode.append(nodeName, null)
+        }
+        MNode conditionNode = entityNode.first(nodeName)
+        Map<String, Object> firstCondition = havingConditions[0]
+        MNode havingNode
+        if (firstCondition.containsKey("combine")) {
+            havingNode = conditionNode.append("having-econditions", ["combine": firstCondition["combine"].toString()])
+            havingConditions = havingConditions.subList(1, havingConditions.size())
+        } else {
+            havingNode = conditionNode.append("having-econditions", null)
+        }
+        havingConditions.each { cond ->
+            if (cond.isEmpty()) return
+            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
+                MNode econditionsNode = havingNode.append("econditions", ["combine": cond["combine"].toString()])
+                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
+                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
+                }
+            } else {
+                havingNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
+            }
+        }
+
         return this
     }
 }
