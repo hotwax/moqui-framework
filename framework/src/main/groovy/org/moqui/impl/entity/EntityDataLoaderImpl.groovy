@@ -312,6 +312,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                 try {
                     loadSingleFile(location, exh, ech, ejh)
                 } catch (Throwable t) {
+                    eci.message.addMessage("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
                     logger.error("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
                 }
             }
