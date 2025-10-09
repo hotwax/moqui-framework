@@ -40,6 +40,7 @@
         AWS Cloudfront: CloudFront-Viewer-Address (requires config in Cloudfront origin request policy)
     -->
     <default-property name="webapp_client_ip_header" value=""/>
+    <default-property name="webapp_screen_page_size" value="20"/>
 
     <!-- Properties for the primary (transactional group) datasource -->
     <default-property name="entity_ds_db_conf" value="h2"/>
