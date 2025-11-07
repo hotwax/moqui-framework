@@ -278,17 +278,15 @@ ${.node}
         int ${.node["@entry"]}_index = 0
         if (${.node["@list"]} instanceof org.moqui.entity.EntityListIterator) {
             try (_${.node["@entry"]}Iterator = ${.node["@list"]}.iterator()) {
-            ${.node["@entry"]}_index = 0
-            while ((${.node["@entry"]} = ${.node["@list"]}.next()) != null) {
-                <#recurse/>
-                ${.node["@entry"]}_index++
-            }
+                ${.node["@entry"]}_index = 0
+                while ((${.node["@entry"]} = _${.node["@entry"]}Iterator.next()) != null) {
+                    <#recurse/>
+                    ${.node["@entry"]}_index++
+                }
             }
         } else {
         Iterator _${.node["@entry"]}Iterator = ${.node["@list"]}.iterator()
-        // behave differently for EntityListIterator, avoid using hasNext()
-        boolean ${.node["@entry"]}IsEli = (_${.node["@entry"]}Iterator instanceof org.moqui.entity.EntityListIterator)
-        while (${.node["@entry"]}IsEli || _${.node["@entry"]}Iterator.hasNext()) {
+        while (_${.node["@entry"]}Iterator.hasNext()) {
             ${.node["@entry"]} = _${.node["@entry"]}Iterator.next()
             // begin iterator internal block
             <#recurse/>
