@@ -1,0 +1,2054 @@
+diff --git framework/service/org/moqui/impl/InstanceServices.xml framework/service/org/moqui/impl/InstanceServices.xml
+index dacbd18c..6c0b6f50 100644
+--- framework/service/org/moqui/impl/InstanceServices.xml
++++ framework/service/org/moqui/impl/InstanceServices.xml
+@@ -723,15 +723,14 @@ along with this software (see the LICENSE.md file). If not, see
+                 dbUserExists = false
+ 
+                 javax.sql.XAConnection testXaCon = null
+-                java.sql.Connection testCon = null
+                 try {
+                     testXaCon = ec.entity.getConfConnection(adminMap)
+-                    testCon = testXaCon.getConnection()
+-                    dbConnectSuccess = true
++                    try (java.sql.Connection testCon = testXaCon.getConnection()) {
++                        dbConnectSuccess = true
++                    }
+                 } catch (Exception e) {
+                     logger.warn("Test connection failed", e)
+                 } finally {
+-                    if (testCon != null) testCon.close()
+                     if (testXaCon != null) testXaCon.close()
+                 }
+ 
+@@ -804,15 +803,14 @@ along with this software (see the LICENSE.md file). If not, see
+                 dbUserExists = false
+ 
+                 javax.sql.XAConnection testXaCon = null
+-                java.sql.Connection testCon = null
+                 try {
+                     testXaCon = ec.entity.getConfConnection(adminMap)
+-                    testCon = testXaCon.getConnection()
++                    try (java.sql.Connection testCon = testXaCon.getConnection()) {
+                     dbConnectSuccess = true
++                    }
+                 } catch (Exception e) {
+                     logger.warn("Test connection to Postgres failed", e)
+                 } finally {
+-                    if (testCon != null) testCon.close()
+                     if (testXaCon != null) testXaCon.close()
+                 }
+
+diff --git framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
+index c1804561..d88ee658 100644
+--- framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
+@@ -164,7 +164,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+         // get the MoquiInit.properties file
+         Properties moquiInitProperties = new Properties()
+         URL initProps = this.class.getClassLoader().getResource("MoquiInit.properties")
+-        if (initProps != null) { InputStream is = initProps.openStream(); moquiInitProperties.load(is); is.close() }
++        if (initProps != null) { try(InputStream is = initProps.openStream()) { moquiInitProperties.load(is);} }
+ 
+         // if there is a system property use that, otherwise from the properties file
+         runtimePath = System.getProperty("moqui.runtime")
+@@ -234,12 +234,15 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+         screenFacade = new ScreenFacadeImpl(this)
+         logger.info("Screen Facade initialized")
+ 
+-        postFacadeInit()
+-
+-        // NOTE: ElasticFacade init after postFacadeInit() so finds embedded from moqui-elasticsearch if present, can move up once moqui-elasticsearch deprecated
++        /**
++         * NOTE: Moved ElasticFacade init before postFacadeInit() as the moqui-elasticsearch component is not being used.
++         * Before this change, the ElasticFacade was initialized after the postFacadeInit() method.
++         */
+         elasticFacade = new ElasticFacadeImpl(this)
+         logger.info("Elastic Facade initialized")
+ 
++        postFacadeInit()
++
+         logger.info("Execution Context Factory initialized in ${(System.currentTimeMillis() - initStartTime)/1000} seconds")
+     }
+ 
+@@ -345,12 +348,15 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+ 
+         URL defaultConfUrl = this.class.getClassLoader().getResource("MoquiDefaultConf.xml")
+         if (defaultConfUrl == null) throw new IllegalArgumentException("Could not find MoquiDefaultConf.xml file on the classpath")
+-        MNode newConfigXmlRoot = MNode.parse(defaultConfUrl.toString(), defaultConfUrl.newInputStream())
++        //MNode newConfigXmlRoot = MNode.parse(defaultConfUrl.toString(), defaultConfUrl.newInputStream())
++        try (InputStream is = defaultConfUrl.newInputStream()) {
++        MNode newConfigXmlRoot = MNode.parse(defaultConfUrl.toString(), is)
+ 
+         // just merge the component configuration, needed before component init is done
+         mergeConfigComponentNodes(newConfigXmlRoot, runtimeConfXmlRoot)
+ 
+         return newConfigXmlRoot
++        }
+     }
+     protected void initComponents(MNode baseConfigNode) {
+         File versionJsonFile = new File(runtimePath + "/version.json")
+@@ -517,9 +523,10 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+         try {
+             if (confSaveFile.exists()) confSaveFile.delete()
+             if (!confSaveFile.parentFile.exists()) confSaveFile.parentFile.mkdirs()
+-            FileWriter fw = new FileWriter(confSaveFile)
++            try (FileWriter fw = new FileWriter(confSaveFile)) {
+             fw.write(confXmlRoot.toString())
+-            fw.close()
++            }
++
+         } catch (Exception e) {
+             logger.warn("Could not save ${confSaveFile.absolutePath} file: ${e.toString()}")
+         }
+@@ -1346,8 +1353,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+                     String targetDirLocation = zipFile.getParent()
+                     logger.info("Expanding component archive ${zipRr.getFileName()} to ${targetDirLocation}")
+ 
+-                    ZipInputStream zipIn = new ZipInputStream(zipRr.openStream())
+-                    try {
++                    try (ZipInputStream zipIn = new ZipInputStream(zipRr.openStream())) {
+                         ZipEntry entry = zipIn.getNextEntry()
+                         // iterates over entries in the zip file
+                         while (entry != null) {
+@@ -1357,14 +1363,13 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+                                 File dir = new File(filePath)
+                                 dir.mkdir()
+                             } else {
+-                                OutputStream os = new FileOutputStream(filePath)
++                                try (OutputStream os = new FileOutputStream(filePath)) {
+                                 ObjectUtilities.copyStream(zipIn, os)
++                                }
+                             }
+                             zipIn.closeEntry()
+                             entry = zipIn.getNextEntry()
+                         }
+-                    } finally {
+-                        zipIn.close()
+                     }
+                 }
+ 
+diff --git framework/src/main/groovy/org/moqui/impl/context/TransactionCache.groovy framework/src/main/groovy/org/moqui/impl/context/TransactionCache.groovy
+index f82a1ee1..ede0a88f 100644
+--- framework/src/main/groovy/org/moqui/impl/context/TransactionCache.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/TransactionCache.groovy
+@@ -440,7 +440,6 @@ class TransactionCache implements Synchronization {
+     }
+ 
+     void flushCache(boolean clearRead) {
+-        Map<String, Connection> connectionByGroup = new HashMap<>()
+         try {
+             int writeInfoListSize = writeInfoList.size()
+             if (writeInfoListSize > 0) {
+@@ -456,12 +455,7 @@ class TransactionCache implements Synchronization {
+                 for (int i = 0; i < writeInfoListSize; i++) {
+                     EntityWriteInfo ewi = (EntityWriteInfo) writeInfoList.get(i)
+                     String groupName = ewi.evb.getEntityDefinition().getEntityGroupName()
+-                    Connection con = connectionByGroup.get(groupName)
+-                    if (con == null) {
+-                        con = efi.getConnection(groupName)
+-                        connectionByGroup.put(groupName, con)
+-                    }
+-
++                    try (Connection con =  efi.getConnection(groupName)) {
+                     if (ewi.writeMode.is(WriteMode.CREATE)) {
+                         ewi.evb.basicCreate(con)
+                         createCount++
+@@ -472,6 +466,7 @@ class TransactionCache implements Synchronization {
+                         ewi.evb.basicUpdate(con)
+                         updateCount++
+                     }
++                    }
+                 }
+                 if (logger.isDebugEnabled()) logger.debug("Flushed TransactionCache in ${System.currentTimeMillis() - startTime}ms: ${createCount} creates, ${updateCount} updates, ${deleteCount} deletes, ${readOneCache.size()} read entries, ${readListCache.size()} entities with list cache")
+             }
+@@ -489,9 +484,6 @@ class TransactionCache implements Synchronization {
+         } catch (Throwable t) {
+             logger.error("Error writing values from TransactionCache: ${t.toString()}", t)
+             throw new XAException("Error writing values from TransactionCache: + ${t.toString()}")
+-        } finally {
+-            // now close connections
+-            for (Connection con in connectionByGroup.values()) con.close()
+         }
+     }
+ 
+diff --git framework/src/main/groovy/org/moqui/impl/context/UserFacadeImpl.groovy framework/src/main/groovy/org/moqui/impl/context/UserFacadeImpl.groovy
+index abd9f7b2..1f4374ca 100644
+--- framework/src/main/groovy/org/moqui/impl/context/UserFacadeImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/UserFacadeImpl.groovy
+@@ -791,9 +791,14 @@ class UserFacadeImpl implements UserFacade {
+         String hashedKey = eci.ecfi.getSimpleHash(loginKey, "", eci.ecfi.getLoginKeyHashType(), false)
+         Timestamp fromDate = getNowTimestamp()
+         long thruTime = fromDate.getTime() + Math.round(expireHours * 60*60*1000)
++        /*
++            TODO:deepak: Set the require new transaction false, we are getting lock wait timeout exception at second login attempt
++            Will check and discuss this with community
++        */
++
+         eci.serviceFacade.sync().name("create", "moqui.security.UserLoginKey")
+                 .parameters([loginKey:hashedKey, userId:userId, fromDate:fromDate, thruDate:new Timestamp(thruTime)])
+-                .disableAuthz().requireNewTransaction(true).call()
++                .disableAuthz().requireNewTransaction(false).call()
+ 
+         // clean out expired keys
+         eci.entity.find("moqui.security.UserLoginKey").condition("userId", userId)
+diff --git framework/src/main/groovy/org/moqui/impl/context/WebFacadeImpl.groovy framework/src/main/groovy/org/moqui/impl/context/WebFacadeImpl.groovy
+index a1b4e4b1..87310a9d 100644
+--- framework/src/main/groovy/org/moqui/impl/context/WebFacadeImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/WebFacadeImpl.groovy
+@@ -827,23 +827,17 @@ class WebFacadeImpl implements WebFacade {
+             response.setHeader("Content-Disposition", "attachment; filename=\"${rr.getFileName()}\"; filename*=utf-8''${StringUtilities.encodeAsciiFilename(rr.getFileName())}")
+         }
+         if (contentType == null || contentType.isEmpty() || ResourceReference.isBinaryContentType(contentType)) {
+-            InputStream is = rr.openStream()
++            try (InputStream is = rr.openStream()) {
+             if (is == null) {
+                 logger.warn("Sending not found response, openStream returned null for location: ${location}")
+                 response.sendError(HttpServletResponse.SC_NOT_FOUND, "Resource not found at ${location}")
+                 return
+             }
+ 
+-            try {
+-                OutputStream os = response.outputStream
+-                try {
++            try (OutputStream os = response.outputStream) {
+                     int totalLen = ObjectUtilities.copyStream(is, os)
+                     logger.info("Streamed ${totalLen} bytes from location ${location}")
+-                } finally {
+-                    os.close()
+-                }
+-            } finally {
+-                is.close()
++            }
+             }
+         } else {
+             String rrText = rr.getText()
+@@ -1386,8 +1380,7 @@ class WebFacadeImpl implements WebFacade {
+         // first send the empty image
+         response.setContentType('image/png')
+         response.setHeader("Content-Disposition", "inline")
+-        OutputStream os = response.outputStream
+-        try { os.write(trackingPng) } finally { os.close() }
++        try (OutputStream os = response.outputStream) { os.write(trackingPng) }
+         // mark the message viewed
+         try {
+             String emailMessageId = (String) eci.contextStack.get("emailMessageId")
+diff --git framework/src/main/groovy/org/moqui/impl/context/renderer/FtlTemplateRenderer.java framework/src/main/groovy/org/moqui/impl/context/renderer/FtlTemplateRenderer.java
+index f16e1cf2..e43fd947 100644
+--- framework/src/main/groovy/org/moqui/impl/context/renderer/FtlTemplateRenderer.java
++++ framework/src/main/groovy/org/moqui/impl/context/renderer/FtlTemplateRenderer.java
+@@ -94,21 +94,17 @@ public class FtlTemplateRenderer implements TemplateRenderer {
+         }
+ 
+         Template newTemplate;
+-        Reader templateReader = null;
+ 
+-        InputStream is = ecfi.resourceFacade.getLocationStream(location);
++        try (InputStream is = ecfi.resourceFacade.getLocationStream(location)) {
+         if (is == null) throw new BaseArtifactException("Template not found at " + location);
+ 
+-        try {
+-            templateReader = new InputStreamReader(is, StandardCharsets.UTF_8);
++        try (Reader templateReader = new InputStreamReader(is, StandardCharsets.UTF_8);) {
+             newTemplate = new Template(location, templateReader, getFtlConfiguration());
+         } catch (Exception e) {
+             throw new BaseArtifactException("Error while initializing template at " + location, e);
+-        } finally {
+-            if (templateReader != null) {
+-                try { templateReader.close(); }
+-                catch (Exception e) { logger.error("Error closing template reader", e); }
+-            }
++        }
++        } catch (IOException e) {
++            throw new BaseArtifactException("Template not found at " + location);
+         }
+ 
+         if (!hasVersion) templateFtlLocationCache.put(location, newTemplate);
+diff --git framework/src/main/groovy/org/moqui/impl/context/renderer/GStringTemplateRenderer.groovy framework/src/main/groovy/org/moqui/impl/context/renderer/GStringTemplateRenderer.groovy
+index 20f27c39..ee167c75 100644
+--- framework/src/main/groovy/org/moqui/impl/context/renderer/GStringTemplateRenderer.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/renderer/GStringTemplateRenderer.groovy
+@@ -74,15 +74,11 @@ class GStringTemplateRenderer implements TemplateRenderer {
+         if (theTemplate) return theTemplate
+ 
+         Template newTemplate = null
+-        Reader templateReader = null
+-        try {
+-            templateReader = new InputStreamReader(ecfi.resourceFacade.getLocationStream(location))
++        try (Reader templateReader = new InputStreamReader(ecfi.resourceFacade.getLocationStream(location))) {
+             GStringTemplateEngine gste = new GStringTemplateEngine()
+             newTemplate = gste.createTemplate(templateReader)
+         } catch (Exception e) {
+             throw new BaseArtifactException("Error while initializing template at [${location}]", e)
+-        } finally {
+-            if (templateReader != null) templateReader.close()
+         }
+ 
+         if (newTemplate) templateGStringLocationCache.put(location, newTemplate)
+diff --git framework/src/main/groovy/org/moqui/impl/context/runner/XmlActionsScriptRunner.groovy framework/src/main/groovy/org/moqui/impl/context/runner/XmlActionsScriptRunner.groovy
+index 872a62df..232f7eda 100644
+--- framework/src/main/groovy/org/moqui/impl/context/runner/XmlActionsScriptRunner.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/runner/XmlActionsScriptRunner.groovy
+@@ -72,15 +72,11 @@ class XmlActionsScriptRunner implements ScriptRunner {
+ 
+         String templateLocation = ecfi.confXmlRoot.first("resource-facade").attribute("xml-actions-template-location")
+         Template newTemplate = null
+-        Reader templateReader = null
+-        try {
+-            templateReader = new InputStreamReader(ecfi.resourceFacade.getLocationStream(templateLocation))
++        try (Reader templateReader = new InputStreamReader(ecfi.resourceFacade.getLocationStream(templateLocation))) {
+             newTemplate = new Template(templateLocation, templateReader,
+                     ecfi.resourceFacade.ftlTemplateRenderer.getFtlConfiguration())
+         } catch (Exception e) {
+             logger.error("Error while initializing XMLActions template at [${templateLocation}]", e)
+-        } finally {
+-            if (templateReader != null) templateReader.close()
+         }
+         xmlActionsTemplate = newTemplate
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
+index 66bcaab3..f75fd41c 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
+@@ -55,13 +55,12 @@ class EntityDataDocument {
+             efi.ecfi.getEci().message.addError(efi.ecfi.resource.expand('File ${filename} already exists.','',[filename:filename]))
+             return 0
+         }
+-
+-        PrintWriter pw = new PrintWriter(outFile)
+-
++        int valuesWritten
++        try (PrintWriter pw = new PrintWriter(outFile)) {
+         pw.write("[\n")
+-        int valuesWritten = writeDocumentsToWriter(pw, dataDocumentIds, condition, fromUpdateStamp, thruUpdatedStamp, prettyPrint)
++        valuesWritten = writeDocumentsToWriter(pw, dataDocumentIds, condition, fromUpdateStamp, thruUpdatedStamp, prettyPrint)
+         pw.write("{}\n]\n")
+-        pw.close()
++        }
+         efi.ecfi.getEci().message.addMessage(efi.ecfi.resource.expand('Wrote ${valuesWritten} documents to file ${filename}','',[valuesWritten:valuesWritten,filename:filename]))
+         return valuesWritten
+     }
+@@ -85,11 +84,11 @@ class EntityDataDocument {
+             }
+             outFile.createNewFile()
+ 
+-            PrintWriter pw = new PrintWriter(outFile)
++            try (PrintWriter pw = new PrintWriter(outFile)) {
+             pw.write("[\n")
+             valuesWritten += writeDocumentsToWriter(pw, [dataDocumentId], condition, fromUpdateStamp, thruUpdatedStamp, prettyPrint)
+             pw.write("{}\n]\n")
+-            pw.close()
++            }
+             efi.ecfi.getEci().message.addMessage(efi.ecfi.resource.expand('Wrote ${valuesWritten} records to file ${filename}','',[valuesWritten:valuesWritten, filename:filename]))
+         }
+ 
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDataLoaderImpl.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDataLoaderImpl.groovy
+index 36edc702..cd4689f5 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDataLoaderImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDataLoaderImpl.groovy
+@@ -75,6 +75,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+     char csvDelimiter = ','
+     char csvCommentStart = '#'
+     char csvQuoteChar = '"'
++    char csvEscapeChar = '\\'
+ 
+     String csvEntityName = null
+     List<String> csvFieldNames = null
+@@ -115,6 +116,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+     @Override EntityDataLoader csvDelimiter(char delimiter) { this.csvDelimiter = delimiter; return this }
+     @Override EntityDataLoader csvCommentStart(char commentStart) { this.csvCommentStart = commentStart; return this }
+     @Override EntityDataLoader csvQuoteChar(char quoteChar) { this.csvQuoteChar = quoteChar; return this }
++    @Override EntityDataLoader csvEscapeChar(char escapeChar) { this.csvEscapeChar = escapeChar; return this }
+ 
+     @Override EntityDataLoader csvEntityName(String entityName) {
+         if (!efi.isEntityDefined(entityName) && !sfi.isServiceDefined(entityName))
+@@ -293,21 +295,15 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+ 
+             // load the CSV text in its own transaction
+             if (this.csvText) {
+-                InputStream csvInputStream = new ByteArrayInputStream(csvText.getBytes("UTF-8"))
+-                try {
++                try (InputStream csvInputStream = new ByteArrayInputStream(csvText.getBytes("UTF-8"))) {
+                     tf.runUseOrBegin(transactionTimeout, "Error loading CSV entity data", { ech.loadFile("csvText", csvInputStream) })
+-                } finally {
+-                    if (csvInputStream != null) csvInputStream.close()
+                 }
+             }
+ 
+             // load the JSON text in its own transaction
+             if (this.jsonText) {
+-                InputStream jsonInputStream = new ByteArrayInputStream(jsonText.getBytes("UTF-8"))
+-                try {
++                try (InputStream jsonInputStream = new ByteArrayInputStream(jsonText.getBytes("UTF-8"))) {
+                     tf.runUseOrBegin(transactionTimeout, "Error loading JSON entity data", { ejh.loadFile("jsonText", jsonInputStream) })
+-                } finally {
+-                    if (jsonInputStream != null) jsonInputStream.close()
+                 }
+             }
+ 
+@@ -316,6 +312,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+                 try {
+                     loadSingleFile(location, exh, ech, ejh)
+                 } catch (Throwable t) {
++                    eci.message.addMessage("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
+                     logger.error("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
+                 }
+             }
+@@ -334,12 +331,11 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+         TransactionFacade tf = efi.ecfi.transactionFacade
+         boolean beganTransaction = tf.begin(transactionTimeout)
+         try {
+-            InputStream inputStream = null
+-            try {
++
++            try (InputStream inputStream = efi.ecfi.resourceFacade.getLocationStream(location)) {
+                 logger.info("Loading entity data from ${location}")
+                 long beforeTime = System.currentTimeMillis()
+ 
+-                inputStream = efi.ecfi.resourceFacade.getLocationStream(location)
+                 if (inputStream == null) throw new BaseException("Data file not found at ${location}")
+ 
+                 long recordsLoaded = 0
+@@ -419,8 +415,6 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+                 }
+             } catch (TypeToSkipException e) {
+                 // nothing to do, this just stops the parsing when we know the file is not in the types we want
+-            } finally {
+-                if (inputStream != null) inputStream.close()
+             }
+         } catch (Throwable t) {
+             tf.rollback(beganTransaction, "Error loading entity data", t)
+@@ -925,6 +919,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
+                     .withSkipHeaderRecord(true) // TODO: remove this? does it even do anything?
+                     .withIgnoreEmptyLines(true)
+                     .withIgnoreSurroundingSpaces(true)
++                    .withEscape(edli.csvEscapeChar)
+                     .parse(reader)
+ 
+             Iterator<CSVRecord> iterator = parser.iterator()
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDataWriterImpl.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDataWriterImpl.groovy
+index 0dee3676..dc6cbe5c 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDataWriterImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDataWriterImpl.groovy
+@@ -103,11 +103,11 @@ class EntityDataWriterImpl implements EntityDataWriter {
+             efi.ecfi.executionContext.message.addError('Cannot write to single CSV file with multiple entity names')
+             return 0
+         }
+-
+-        PrintWriter pw = new PrintWriter(outFile)
++        int valuesWritten
++        try (PrintWriter pw = new PrintWriter(outFile)) {
+         // NOTE: don't have to do anything different here for different file types, writer() method will handle that
+-        int valuesWritten = this.writer(pw)
+-        pw.close()
++            valuesWritten = this.writer(pw)
++        }
+         efi.ecfi.executionContext.message.addMessage(efi.ecfi.resource.expand('Wrote ${valuesWritten} records to file ${filename}', '', [valuesWritten:valuesWritten, filename:filename]))
+         return valuesWritten
+     }
+@@ -130,9 +130,9 @@ class EntityDataWriterImpl implements EntityDataWriter {
+             return 0
+         }
+ 
+-        ZipOutputStream out = new ZipOutputStream(new FileOutputStream(zipFile))
+-        try {
+-            PrintWriter pw = new PrintWriter(out)
++
++        try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(zipFile))
++            PrintWriter pw = new PrintWriter(out)) {
+             ZipEntry e = new ZipEntry(filenameWithinZip)
+             out.putNextEntry(e)
+             try {
+@@ -143,8 +143,6 @@ class EntityDataWriterImpl implements EntityDataWriter {
+             } finally {
+                 out.closeEntry()
+             }
+-        } finally {
+-            out.close()
+         }
+     }
+ 
+@@ -185,8 +183,7 @@ class EntityDataWriterImpl implements EntityDataWriter {
+                         }
+                         outFile.createNewFile()
+ 
+-                        PrintWriter pw = new PrintWriter(outFile)
+-                        try {
++                        try (PrintWriter pw = new PrintWriter(outFile)) {
+                             startFile(pw, ed)
+ 
+                             int curValuesWritten = 0
+@@ -199,8 +196,6 @@ class EntityDataWriterImpl implements EntityDataWriter {
+ 
+                             efi.ecfi.getEci().message.addMessage(efi.ecfi.resource.expand('Wrote ${curValuesWritten} records to file ${filename}','',[curValuesWritten:curValuesWritten,filename:filename]))
+                             valuesWritten += curValuesWritten
+-                        } finally {
+-                            pw.close()
+                         }
+                     }
+                 }
+@@ -240,9 +235,10 @@ class EntityDataWriterImpl implements EntityDataWriter {
+         if (dependentLevels > 0) efi.createAllAutoReverseManyRelationships()
+ 
+         int valuesWritten = 0
+-        ZipOutputStream out = new ZipOutputStream(outputStream)
+-        try {
+-            PrintWriter pw = new PrintWriter(out)
++
++        try (ZipOutputStream out = new ZipOutputStream(outputStream)
++             PrintWriter pw = new PrintWriter(out)) {
++
+             for (String en in entityNames) {
+                 if (skipEntityNames.contains(en)) continue
+                 EntityDefinition ed = efi.getEntityDefinition(en)
+@@ -275,8 +271,6 @@ class EntityDataWriterImpl implements EntityDataWriter {
+                     }
+                 }
+             }
+-        } finally {
+-            out.close()
+         }
+         return valuesWritten
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+index d487e7de..885ef991 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+@@ -111,29 +111,19 @@ class EntityDbMeta {
+         Set<String> existingTableNames = new HashSet<>()
+ 
+         boolean beganTx = useTxForMetaData ? efi.ecfi.transactionFacade.begin(300) : false
+-        try {
+-            Connection con = efi.getConnection(groupName)
+-
+-            try {
++        try (Connection con = efi.getConnection(groupName)) {
+                 DatabaseMetaData dbData = con.getMetaData()
+-
+-                ResultSet tableSet = null
+-                try {
+-                    tableSet = dbData.getTables(con.getCatalog(), schemaName, "%", types)
++                try (ResultSet tableSet = dbData.getTables(con.getCatalog(), schemaName, "%", types)) {
+                     while (tableSet.next()) {
+                         String tableName = tableSet.getString('TABLE_NAME')
+                         existingTableNames.add(tableName)
+                     }
+                 } catch (Exception e) {
+                     throw new EntityException("Exception getting tables in group ${groupName}", e)
+-                } finally {
+-                    if (tableSet != null && !tableSet.isClosed()) tableSet.close()
+                 }
+ 
+                 Map<String, Set<String>> existingColumnsByTable = new HashMap<>()
+-                ResultSet colSet = null
+-                try {
+-                    colSet = dbData.getColumns(con.getCatalog(), schemaName, "%", "%")
++                try (ResultSet colSet = dbData.getColumns(con.getCatalog(), schemaName, "%", "%")) {
+                     while (colSet.next()) {
+                         String tableName = colSet.getString("TABLE_NAME")
+                         String colName = colSet.getString("COLUMN_NAME")
+@@ -149,8 +139,6 @@ class EntityDbMeta {
+                     }
+                 } catch (Exception e) {
+                     throw new EntityException("Exception getting columns in group ${groupName}", e)
+-                } finally {
+-                    if (colSet != null && !colSet.isClosed()) colSet.close()
+                 }
+ 
+                 Set<String> remainingTableNames = new HashSet<>(existingTableNames)
+@@ -210,9 +198,6 @@ class EntityDbMeta {
+ 
+                 if (remainingTableNames.size() > 0)
+                     logger.warn("Found unknown tables in database for group ${groupName}: ${remainingTableNames}")
+-            } finally {
+-                if (con != null) con.close()
+-            }
+         } finally {
+             if (beganTx) efi.ecfi.transactionFacade.commit()
+         }
+@@ -222,20 +207,15 @@ class EntityDbMeta {
+             logger.info("Tables were created, checking FKs for all entities in group ${groupName}")
+ 
+             beganTx = useTxForMetaData ? efi.ecfi.transactionFacade.begin(300) : false
+-            try {
+-                Connection con = efi.getConnection(groupName)
+-
+-                try {
++            try (Connection con = efi.getConnection(groupName)) {
+                     DatabaseMetaData dbData = con.getMetaData()
+ 
+                     // NOTE: don't need to get fresh results for existing table names as created tables are added to the Set above
+ 
+                     Map<String, Map<String, Set<String>>> fkInfoByFkTable = new HashMap<>()
+-                    ResultSet ikSet = null
+-                    try {
++                    try (ResultSet ikSet = dbData.getImportedKeys(null, schemaName, "%")) {
+                         // don't rely on constraint name, look at related table name, keys
+                         // get set of fields on main entity to match against (more unique than fields on related entity)
+-                        ikSet = dbData.getImportedKeys(null, schemaName, "%")
+                         while (ikSet.next()) {
+                             // logger.info("Existing FK col: PKTABLE_NAME [${ikSet.getString("PKTABLE_NAME")}] PKCOLUMN_NAME [${ikSet.getString("PKCOLUMN_NAME")}] FKTABLE_NAME [${ikSet.getString("FKTABLE_NAME")}] FKCOLUMN_NAME [${ikSet.getString("FKCOLUMN_NAME")}]")
+                             String pkTable = ikSet.getString("PKTABLE_NAME")
+@@ -250,8 +230,6 @@ class EntityDbMeta {
+                         }
+                     } catch (Exception e) {
+                         logger.error("Error getting all foreign keys for group ${groupName}", e)
+-                    } finally {
+-                        if (ikSet != null && !ikSet.isClosed()) ikSet.close()
+                     }
+ 
+                     if (fkInfoByFkTable.size() == 0) {
+@@ -261,8 +239,7 @@ class EntityDbMeta {
+                             if (ed.isViewEntity) continue
+                             String fkTable = ed.getTableName()
+                             boolean gotIkResults = false
+-                            try {
+-                                ikSet = dbData.getImportedKeys(null, schemaName, fkTable)
++                            try (ResultSet ikSet = dbData.getImportedKeys(null, schemaName, fkTable)) {
+                                 while (ikSet.next()) {
+                                     gotIkResults = true
+                                     String pkTable = ikSet.getString("PKTABLE_NAME")
+@@ -275,13 +252,10 @@ class EntityDbMeta {
+                                 }
+                             } catch (Exception e) {
+                                 logger.error("Error getting foreign keys for entity ${entityName} group ${groupName}", e)
+-                            } finally {
+-                                if (ikSet != null && !ikSet.isClosed()) ikSet.close()
+                             }
+                             if (!gotIkResults) {
+                                 // no results found, try lower case table name
+-                                try {
+-                                    ikSet = dbData.getImportedKeys(null, schemaName, fkTable.toLowerCase())
++                                try (ResultSet ikSet = dbData.getImportedKeys(null, schemaName, fkTable.toLowerCase())) {
+                                     while (ikSet.next()) {
+                                         String pkTable = ikSet.getString("PKTABLE_NAME")
+                                         String fkCol = ikSet.getString("FKCOLUMN_NAME")
+@@ -293,8 +267,6 @@ class EntityDbMeta {
+                                     }
+                                 } catch (Exception e) {
+                                     logger.error("Error getting foreign keys for entity ${entityName} group ${groupName}", e)
+-                                } finally {
+-                                    if (ikSet != null && !ikSet.isClosed()) ikSet.close()
+                                 }
+                             }
+                         }
+@@ -366,9 +338,6 @@ class EntityDbMeta {
+                         if (noRelTableCount > 0) logger.warn("In full FK check found ${noRelTableCount} type one relationships where no table exists for related entity")
+                         if (fksCreated > 0) logger.info("Created ${fksCreated} FKs out of ${relOneCount} type one relationships for entity ${entityName}")
+                     }
+-                } finally {
+-                    if (con != null) con.close()
+-                }
+             } finally {
+                 if (beganTx) efi.ecfi.transactionFacade.commit()
+             }
+@@ -450,34 +419,32 @@ class EntityDbMeta {
+             dbResult = anyExist
+         } else {
+             String groupName = ed.getEntityGroupName()
+-            Connection con = null
+-            ResultSet tableSet1 = null
+-            ResultSet tableSet2 = null
+             boolean beganTx = useTxForMetaData ? efi.ecfi.transactionFacade.begin(5) : false
+-            try {
+-                con = efi.getConnection(groupName)
++            try (Connection con = efi.getConnection(groupName)) {
+                 DatabaseMetaData dbData = con.getMetaData()
+ 
+                 String[] types = ["TABLE", "VIEW", "ALIAS", "SYNONYM", "PARTITIONED TABLE"]
+-                tableSet1 = dbData.getTables(con.getCatalog(), ed.getSchemaName(), ed.getTableName(), types)
++                try (ResultSet tableSet1 = dbData.getTables(con.getCatalog(), ed.getSchemaName(), ed.getTableName(), types)) {
+                 if (tableSet1.next()) {
+                     dbResult = true
+                 } else {
+                     // try lower case, just in case DB is case sensitive
+-                    tableSet2 = dbData.getTables(con.getCatalog(), ed.getSchemaName(), ed.getTableName().toLowerCase(), types)
++                    try (ResultSet tableSet2 = dbData.getTables(con.getCatalog(), ed.getSchemaName(), ed.getTableName().toLowerCase(), types)) {
+                     if (tableSet2.next()) {
+                         dbResult = true
+                     } else {
+                         if (logger.isTraceEnabled()) logger.trace("Table for entity ${ed.getFullEntityName()} does NOT exist")
+                         dbResult = false
+                     }
++                    }
+                 }
++                }
++            }  catch (EntityException ee) {
++                logger.warn("Could not get connection so treating entity ${ed.fullEntityName} in group ${groupName} as table does not exist: ${ee.toString()}")
++                return false
+             } catch (Exception e) {
+                 throw new EntityException("Exception checking to see if table ${ed.getTableName()} exists", e)
+             } finally {
+-                if (tableSet1 != null && !tableSet1.isClosed()) tableSet1.close()
+-                if (tableSet2 != null && !tableSet2.isClosed()) tableSet2.close()
+-                if (con != null) con.close()
+                 if (beganTx) efi.ecfi.transactionFacade.commit()
+             }
+         }
+@@ -560,18 +527,15 @@ class EntityDbMeta {
+         if (ed.isViewEntity) return new ArrayList<FieldInfo>()
+ 
+         String groupName = ed.getEntityGroupName()
+-        Connection con = null
+-        ResultSet colSet1 = null
+-        ResultSet colSet2 = null
++
+         boolean beganTx = useTxForMetaData ? efi.ecfi.transactionFacade.begin(5) : false
+-        try {
+-            con = efi.getConnection(groupName)
++        try (Connection con = efi.getConnection(groupName)) {
+             DatabaseMetaData dbData = con.getMetaData()
+             // con.setAutoCommit(false)
+ 
+             ArrayList<FieldInfo> fieldInfos = new ArrayList<>(ed.allFieldInfoList)
+             int fieldCount = fieldInfos.size()
+-            colSet1 = dbData.getColumns(con.getCatalog(), ed.getSchemaName(), ed.getTableName(), "%")
++            try (ResultSet colSet1 = dbData.getColumns(con.getCatalog(), ed.getSchemaName(), ed.getTableName(), "%")) {
+             if (colSet1.isClosed()) {
+                 logger.error("Tried to get columns for entity ${ed.getFullEntityName()} but ResultSet was closed!")
+                 return new ArrayList<FieldInfo>()
+@@ -587,10 +551,11 @@ class EntityDbMeta {
+                     }
+                 }
+             }
++            }
+ 
+             if (fieldInfos.size() == fieldCount) {
+                 // try lower case table name
+-                colSet2 = dbData.getColumns(con.getCatalog(), ed.getSchemaName(), ed.getTableName().toLowerCase(), "%")
++                try (ResultSet colSet2 = dbData.getColumns(con.getCatalog(), ed.getSchemaName(), ed.getTableName().toLowerCase(), "%")) {
+                 if (colSet2.isClosed()) {
+                     logger.error("Tried to get columns for entity ${ed.getFullEntityName()} but ResultSet was closed!")
+                     return new ArrayList<FieldInfo>()
+@@ -606,6 +571,7 @@ class EntityDbMeta {
+                         }
+                     }
+                 }
++                }
+ 
+                 if (fieldInfos.size() == fieldCount) {
+                     logger.warn("Could not find any columns to match fields for entity ${ed.getFullEntityName()}")
+@@ -617,9 +583,6 @@ class EntityDbMeta {
+             logger.error("Exception checking for missing columns in table ${ed.getTableName()}", e)
+             return new ArrayList<FieldInfo>()
+         } finally {
+-            if (colSet1 != null && !colSet1.isClosed()) colSet1.close()
+-            if (colSet2 != null && !colSet2.isClosed()) colSet2.close()
+-            if (con != null && !con.isClosed()) con.close()
+             if (beganTx) efi.ecfi.transactionFacade.commit()
+         }
+     }
+@@ -816,18 +779,14 @@ class EntityDbMeta {
+     }
+     Boolean indexExists(EntityDefinition ed, String indexName, Collection<String> indexFields) {
+         String groupName = ed.getEntityGroupName()
+-        Connection con = null
+-        ResultSet ikSet1 = null
+-        ResultSet ikSet2 = null
+-        try {
+-            con = efi.getConnection(groupName)
++        try (Connection con = efi.getConnection(groupName)) {
+             DatabaseMetaData dbData = con.getMetaData()
+             Set<String> fieldNames = new HashSet(indexFields)
+ 
+-            ikSet1 = dbData.getIndexInfo(null, ed.getSchemaName(), ed.getTableName(), false, true)
++            try (ResultSet ikSet1 = dbData.getIndexInfo(null, ed.getSchemaName(), ed.getTableName(), false, true)) {
+             while (ikSet1.next()) {
+-                String idxName = ikSet1.getString("INDEX_NAME")
+-                if (idxName.toLowerCase() != indexName.toLowerCase()) continue
++                String dbIdxName = ikSet1.getString("INDEX_NAME")
++                if (dbIdxName == null || dbIdxName.toLowerCase() != indexName.toLowerCase()) continue
+                 String idxCol = ikSet1.getString("COLUMN_NAME")
+                 for (String fn in fieldNames) {
+                     String fnColName = ed.getColumnName(fn)
+@@ -837,12 +796,13 @@ class EntityDbMeta {
+                     }
+                 }
+             }
++            }
+             if (fieldNames.size() > 0) {
+                 // try with lower case table name
+-                ikSet2 = dbData.getIndexInfo(null, ed.getSchemaName(), ed.getTableName().toLowerCase(), false, true)
++                try (ResultSet ikSet2 = dbData.getIndexInfo(null, ed.getSchemaName(), ed.getTableName().toLowerCase(), false, true)) {
+                 while (ikSet2.next()) {
+-                    String idxName = ikSet2.getString("INDEX_NAME")
+-                    if (idxName.toLowerCase() != indexName.toLowerCase()) continue
++                    String dbIdxName = ikSet2.getString("INDEX_NAME")
++                    if (dbIdxName == null || dbIdxName.toLowerCase() != indexName.toLowerCase()) continue
+                     String idxCol = ikSet2.getString("COLUMN_NAME")
+                     for (String fn in fieldNames) {
+                         String fnColName = ed.getColumnName(fn)
+@@ -852,6 +812,7 @@ class EntityDbMeta {
+                         }
+                     }
+                 }
++                }
+             }
+ 
+             // if we found all of the index-field field-names then fieldNames will be empty, and we have a full index
+@@ -859,21 +820,14 @@ class EntityDbMeta {
+         } catch (Exception e) {
+             logger.error("Exception checking to see if index exists for table ${ed.getTableName()}", e)
+             return null
+-        } finally {
+-            if (ikSet1 != null && !ikSet1.isClosed()) ikSet1.close()
+-            if (ikSet2 != null && !ikSet2.isClosed()) ikSet2.close()
+-            if (con != null) con.close()
+         }
+     }
+ 
+     Boolean foreignKeyExists(EntityDefinition ed, RelationshipInfo relInfo) {
+         String groupName = ed.getEntityGroupName()
+         EntityDefinition relEd = relInfo.relatedEd
+-        Connection con = null
+-        ResultSet ikSet1 = null
+-        ResultSet ikSet2 = null
+-        try {
+-            con = efi.getConnection(groupName)
++        try (Connection con = efi.getConnection(groupName)) {
++
+             DatabaseMetaData dbData = con.getMetaData()
+ 
+             // don't rely on constraint name, look at related table name, keys
+@@ -882,7 +836,7 @@ class EntityDbMeta {
+             Set<String> fieldNames = new HashSet(keyMap.keySet())
+             Set<String> fkColsFound = new HashSet()
+ 
+-            ikSet1 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName())
++            try (ResultSet ikSet1 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName())) {
+             while (ikSet1.next()) {
+                 String pkTable = ikSet1.getString("PKTABLE_NAME")
+                 // logger.info("FK exists [${ed.getFullEntityName()}] - [${relNode."@title"}${relEd.getFullEntityName()}] PKTABLE_NAME [${ikSet.getString("PKTABLE_NAME")}] PKCOLUMN_NAME [${ikSet.getString("PKCOLUMN_NAME")}] FKCOLUMN_NAME [${ikSet.getString("FKCOLUMN_NAME")}]")
+@@ -897,9 +851,10 @@ class EntityDbMeta {
+                     }
+                 }
+             }
++            }
+             if (fieldNames.size() > 0) {
+                 // try with lower case table name
+-                ikSet2 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName().toLowerCase())
++                try (ResultSet ikSet2 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName().toLowerCase())) {
+                 while (ikSet2.next()) {
+                     String pkTable = ikSet2.getString("PKTABLE_NAME")
+                     // logger.info("FK exists [${ed.getFullEntityName()}] - [${relNode."@title"}${relEd.getFullEntityName()}] PKTABLE_NAME [${ikSet.getString("PKTABLE_NAME")}] PKCOLUMN_NAME [${ikSet.getString("PKCOLUMN_NAME")}] FKCOLUMN_NAME [${ikSet.getString("FKCOLUMN_NAME")}]")
+@@ -914,6 +869,7 @@ class EntityDbMeta {
+                         }
+                     }
+                 }
++                }
+             }
+ 
+             // logger.info("Checking FK exists for entity [${ed.getFullEntityName()}] relationship [${relNode."@title"}${relEd.getFullEntityName()}] fields to match are [${keyMap.keySet()}] FK columns found [${fkColsFound}] final fieldNames (empty for match) [${fieldNames}]")
+@@ -923,20 +879,12 @@ class EntityDbMeta {
+         } catch (Exception e) {
+             logger.error("Exception checking to see if foreign key exists for table ${ed.getTableName()}", e)
+             return null
+-        } finally {
+-            if (ikSet1 != null && !ikSet1.isClosed()) ikSet1.close()
+-            if (ikSet2 != null && !ikSet2.isClosed()) ikSet2.close()
+-            if (con != null) con.close()
+         }
+     }
+     String getForeignKeyName(EntityDefinition ed, RelationshipInfo relInfo) {
+         String groupName = ed.getEntityGroupName()
+         EntityDefinition relEd = relInfo.relatedEd
+-        Connection con = null
+-        ResultSet ikSet1 = null
+-        ResultSet ikSet2 = null
+-        try {
+-            con = efi.getConnection(groupName)
++        try (Connection con = efi.getConnection(groupName)) {
+             DatabaseMetaData dbData = con.getMetaData()
+ 
+             // don't rely on constraint name, look at related table name, keys
+@@ -946,7 +894,7 @@ class EntityDbMeta {
+             List<String> fieldNames = new ArrayList(keyMap.keySet())
+             Map<String, Set<String>> fieldsByFkName = new HashMap<>()
+ 
+-            ikSet1 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName())
++            try (ResultSet ikSet1 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName())) {
+             while (ikSet1.next()) {
+                 String pkTable = ikSet1.getString("PKTABLE_NAME")
+                 // logger.info("FK exists [${ed.getFullEntityName()}] - [${relNode."@title"}${relEd.getFullEntityName()}] PKTABLE_NAME [${ikSet.getString("PKTABLE_NAME")}] PKCOLUMN_NAME [${ikSet.getString("PKCOLUMN_NAME")}] FKCOLUMN_NAME [${ikSet.getString("FKCOLUMN_NAME")}]")
+@@ -963,9 +911,10 @@ class EntityDbMeta {
+                     }
+                 }
+             }
++            }
+             if (fieldNames.size() > 0) {
+                 // try with lower case table name
+-                ikSet2 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName().toLowerCase())
++                try (ResultSet ikSet2 = dbData.getImportedKeys(null, ed.getSchemaName(), ed.getTableName().toLowerCase())) {
+                 while (ikSet2.next()) {
+                     String pkTable = ikSet2.getString("PKTABLE_NAME")
+                     // logger.info("FK exists [${ed.getFullEntityName()}] - [${relNode."@title"}${relEd.getFullEntityName()}] PKTABLE_NAME [${ikSet.getString("PKTABLE_NAME")}] PKCOLUMN_NAME [${ikSet.getString("PKCOLUMN_NAME")}] FKCOLUMN_NAME [${ikSet.getString("FKCOLUMN_NAME")}]")
+@@ -982,6 +931,7 @@ class EntityDbMeta {
+                         }
+                     }
+                 }
++                }
+             }
+ 
+             // logger.warn("fieldNames: ${fieldNames}"); logger.warn("fieldsByFkName: ${fieldsByFkName}")
+@@ -992,10 +942,6 @@ class EntityDbMeta {
+         } catch (Exception e) {
+             logger.error("Exception getting foreign key name for table ${ed.getTableName()}", e)
+             return null
+-        } finally {
+-            if (ikSet1 != null && !ikSet1.isClosed()) ikSet1.close()
+-            if (ikSet2 != null && !ikSet2.isClosed()) ikSet2.close()
+-            if (con != null) con.close()
+         }
+     }
+ 
+@@ -1186,16 +1132,15 @@ class EntityDbMeta {
+         try {
+             // use a short timeout here just in case this is in the middle of stuff going on with tables locked, may happen a lot for FK ops
+             efi.ecfi.transactionFacade.runRequireNew(10, "Error in DB meta data change", useTxForMetaData, true, {
+-                Connection con = null
+-                Statement stmt = null
+-
+-                try {
+-                    con = sharedCon != null ? sharedCon : efi.getConnection(groupName)
+-                    stmt = con.createStatement()
+-                    records = stmt.executeUpdate(sql.toString())
+-                } finally {
+-                    if (stmt != null) stmt.close()
+-                    if (con != null && sharedCon == null) con.close()
++                if (sharedCon != null) {
++                    try (Statement stmt = sharedCon.createStatement()) {
++                        records = stmt.executeUpdate(sql.toString())
++                    }
++                } else {
++                    try (Connection con = efi.getConnection(groupName)
++                        Statement stmt = con.createStatement()) {
++                        records = stmt.executeUpdate(sql.toString())
++                    }
+                 }
+             })
+         } catch (Throwable t) {
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDynamicViewImpl.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDynamicViewImpl.groovy
+index 96255220..a0380ad9 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDynamicViewImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDynamicViewImpl.groovy
+@@ -43,6 +43,10 @@ class EntityDynamicViewImpl implements EntityDynamicView {
+     @Override
+     EntityDynamicView addMemberEntity(String entityAlias, String entityName, String joinFromAlias, Boolean joinOptional,
+                                       Map<String, String> entityKeyMaps) {
++        return addMemberEntity(entityAlias, entityName, joinFromAlias, joinOptional, entityKeyMaps, null, null)
++    }
++    EntityDynamicView addMemberEntity(String entityAlias, String entityName, String joinFromAlias, Boolean joinOptional,
++                                      Map<String, String> entityKeyMaps, List<Map<String, String>> entityConditions, String subSelect) {
+         MNode memberEntity = entityNode.append("member-entity", ["entity-alias":entityAlias, "entity-name":entityName])
+         if (joinFromAlias) {
+             memberEntity.attributes.put("join-from-alias", joinFromAlias)
+@@ -51,6 +55,41 @@ class EntityDynamicViewImpl implements EntityDynamicView {
+         if (entityKeyMaps) for (Map.Entry<String, String> keyMapEntry in entityKeyMaps.entrySet()) {
+             memberEntity.append("key-map", ["field-name":keyMapEntry.getKey(), "related":keyMapEntry.getValue()])
+         }
++        if (entityConditions) {
++            MNode entityCondition = memberEntity.append("entity-condition", null)
++
++            for (Map<String, String> condition : (entityConditions as List<Map<String, String>>)) {
++                String fieldName = condition["field-name"]
++                String toFieldName = condition["to-field-name"]
++                String value = condition["value"]
++                String operator = condition["operator"]
++                if (fieldName && fieldName.contains(".") && toFieldName && toFieldName.contains(".")) {
++                    def strings1 = fieldName.split("\\.", 2)
++                    def (alias, field) = [strings1[0], strings1[1]]
++
++                    if (toFieldName && toFieldName.contains(".")) {
++                        def strings = toFieldName.split("\\.", 2)
++                        def (toEntityAlias, toField) = [strings[0], strings[1]]
++                        entityCondition.append("econdition", ["entity-alias": alias, "field-name": field, "to-entity-alias": toEntityAlias, "to-field-name": toField])
++                    }
++                }
++                else if (value) {
++                    entityCondition.append("econdition", ["field-name": fieldName, "value": value])
++                }
++                else if  (operator) {
++                    entityCondition.append("econdition", ["field-name": fieldName, "operator": operator, "value": value])
++                }
++
++                if (condition.containsKey("date-filter")) {
++                    entityCondition.append("date-filter", null)
++                }
++            }
++        }
++        // Handle subSelect
++        if (subSelect) {
++            memberEntity.attributes.put("sub-select", subSelect)
++        }
++
+         return this
+     }
+ 
+@@ -99,15 +138,20 @@ class EntityDynamicViewImpl implements EntityDynamicView {
+     }
+     @Override
+     EntityDynamicView addAlias(String entityAlias, String name, String field, String function) {
+-        return addAlias(entityAlias, name, field, function, null)
++        return addAlias(entityAlias, name, field, function, null,null)
+     }
+-    EntityDynamicView addAlias(String entityAlias, String name, String field, String function, String defaultDisplay) {
++    EntityDynamicView addAlias(String entityAlias, String name, String field, String function, String defaultDisplay, String isAggregate) {
+         MNode aNode = entityNode.append("alias", ["entity-alias":entityAlias, name:name])
+         if (field != null && !field.isEmpty()) aNode.attributes.put("field", field)
+         if (function != null && !function.isEmpty()) aNode.attributes.put("function", function)
+         if (defaultDisplay != null && !defaultDisplay.isEmpty()) aNode.attributes.put("default-display", defaultDisplay)
++        if (isAggregate!= null && !isAggregate.isEmpty()) aNode.attributes.put("is-aggregate", isAggregate)
+         return this
+     }
++
++    EntityDynamicView addAlias(String entityAlias, String name, String field, String function, String defaultDisplay) {
++        return addAlias(entityAlias, name, field, function, null,null)
++    }
+     EntityDynamicView addPqExprAlias(String name, String pqExpression, String type, String defaultDisplay) {
+         MNode aNode = entityNode.append("alias", [name:name, "pq-expression":pqExpression, type:(type ?: "text-long")])
+         if (defaultDisplay != null && !defaultDisplay.isEmpty()) aNode.attributes.put("default-display", defaultDisplay)
+@@ -123,4 +167,60 @@ class EntityDynamicViewImpl implements EntityDynamicView {
+         }
+         return this
+     }
++
++    EntityDynamicView addWhereConditions(List<Map<String, Object>> conditions) {
++        if (!conditions || conditions.isEmpty()) return this
++
++        String nodeName = "entity-condition"
++        if (!entityNode.hasChild(nodeName)) {
++            entityNode.append(nodeName, null)
++        }
++        MNode conditionNode = entityNode.first(nodeName)
++
++        conditions.each { cond ->
++            if (cond.isEmpty()) return
++
++            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
++                MNode econditionsNode = conditionNode.append("econditions", ["combine": cond["combine"]] as Map<String, String>)
++                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
++                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
++                }
++            } else {
++                conditionNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
++            }
++        }
++
++        return this
++    }
++
++    EntityDynamicView addHavingConditions(List<Map<String, Object>> havingConditions) {
++        if (!havingConditions || havingConditions.isEmpty()) return this
++
++        String nodeName = "entity-condition"
++        if (!entityNode.hasChild(nodeName)) {
++            entityNode.append(nodeName, null)
++        }
++        MNode conditionNode = entityNode.first(nodeName)
++        Map<String, Object> firstCondition = havingConditions[0]
++        MNode havingNode
++        if (firstCondition.containsKey("combine")) {
++            havingNode = conditionNode.append("having-econditions", ["combine": firstCondition["combine"].toString()])
++            havingConditions = havingConditions.subList(1, havingConditions.size())
++        } else {
++            havingNode = conditionNode.append("having-econditions", null)
++        }
++        havingConditions.each { cond ->
++            if (cond.isEmpty()) return
++            if (cond.containsKey("combine") && cond.containsKey("conditions")) {
++                MNode econditionsNode = havingNode.append("econditions", ["combine": cond["combine"].toString()])
++                (cond["conditions"] as List<Map<String, Object>>).each { subCond ->
++                    econditionsNode.append("econdition", subCond.collectEntries { k, v -> [k, v.toString()] })
++                }
++            } else {
++                havingNode.append("econdition", cond.collectEntries { k, v -> [k, v.toString()] })
++            }
++        }
++
++        return this
++    }
+ }
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
+index acd5aaf1..d9477960 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
+@@ -1276,16 +1276,13 @@ class EntityFacadeImpl implements EntityFacade {
+         int records = 0
+         ecfi.transactionFacade.runRequireNew(30, "Error in DB meta data change", false, true, {
+             XAConnection xacon = null
+-            Connection con = null
+-            Statement stmt = null
+             try {
+                 xacon = getConfConnection(confMap)
+-                con = xacon.getConnection()
+-                stmt = con.createStatement()
++                try (Connection con = xacon.getConnection()
++                Statement stmt = con.createStatement()) {
+                 records = stmt.executeUpdate(sql.toString())
++                }
+             } finally {
+-                if (stmt != null) stmt.close()
+-                if (con != null) con.close()
+                 if (xacon != null) xacon.close()
+             }
+         })
+@@ -1311,20 +1308,15 @@ class EntityFacadeImpl implements EntityFacade {
+     long runSqlCountConf(CharSequence from, CharSequence where, Map<String, String> confMap) {
+         StringBuilder sqlSb = new StringBuilder("SELECT COUNT(*) FROM ").append(from).append(" WHERE ").append(where)
+         XAConnection xacon = null
+-        Connection con = null
+-        Statement stmt = null
+-        ResultSet rs = null
+         try {
+             xacon = getConfConnection(confMap)
+-            con = xacon.getConnection()
+-            stmt = con.createStatement()
+-            rs = stmt.executeQuery(sqlSb.toString())
++            try (Connection con = xacon.getConnection()
++            Statement stmt = con.createStatement()
++            ResultSet rs = stmt.executeQuery(sqlSb.toString())) {
+             if (rs.next()) return rs.getLong(1)
++            }
+             return 0
+         } finally {
+-            if (stmt != null) stmt.close()
+-            if (rs != null) rs.close()
+-            if (con != null) con.close()
+             if (xacon != null) xacon.close()
+         }
+     }
+@@ -1572,12 +1564,8 @@ class EntityFacadeImpl implements EntityFacade {
+ 
+         // run the SQL now that it is built
+         EntityValueBase newEntityValue = (EntityValueBase) null
+-        Connection connection = (Connection) null
+-        PreparedStatement ps = (PreparedStatement) null
+-        ResultSet rs = (ResultSet) null
+-        try {
+-            connection = getConnection(ed.getEntityGroupName())
+-            ps = connection.prepareStatement(finalSql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
++        try (Connection connection = getConnection(ed.getEntityGroupName())
++            PreparedStatement ps = connection.prepareStatement(finalSql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
+             for (int i = 0; i < pkSize; i++) {
+                 FieldInfo fi = (FieldInfo) pkFieldInfoArray[i]
+                 Object fieldValue = values[i]
+@@ -1586,7 +1574,7 @@ class EntityFacadeImpl implements EntityFacade {
+ 
+             boolean queryStats = getQueryStats()
+             long beforeQuery = queryStats ? System.nanoTime() : 0
+-            rs = ps.executeQuery()
++            try (ResultSet rs = ps.executeQuery()) {
+             if (queryStats) saveQueryStats(ed, finalSql, System.nanoTime() - beforeQuery, false)
+ 
+             if (rs.next()) {
+@@ -1599,14 +1587,9 @@ class EntityFacadeImpl implements EntityFacade {
+                     fi.getResultSetValue(rs, i + 1, valueMap, this)
+                 }
+             }
++            }
+         } catch (SQLException e) {
+             throw new EntityException("Error finding value", e);
+-        } finally {
+-            try {
+-                if (ps != null) ps.close()
+-                if (rs != null) rs.close()
+-                if (connection != null) connection.close();
+-            } catch (SQLException sqle) { throw new EntityException("Error finding value", sqle); }
+         }
+ 
+         return newEntityValue;
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityFindImpl.java framework/src/main/groovy/org/moqui/impl/entity/EntityFindImpl.java
+index e83fb29c..a219a78c 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityFindImpl.java
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityFindImpl.java
+@@ -50,8 +50,9 @@ public class EntityFindImpl extends EntityFindBase {
+ 
+         // table doesn't exist, just return null
+         if (!ed.tableExistsDbMetaOnly()) return null;
+-
+-        EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray);
++        // run the SQL now that it is built
++        EntityValueBase newEntityValue = null;
++        try (EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray)) {
+         // flag as a find one, small changes to internal behavior to reduce overhead
+         efb.isFindOne();
+ 
+@@ -67,9 +68,8 @@ public class EntityFindImpl extends EntityFindBase {
+         // FOR UPDATE
+         if (getForUpdate()) efb.makeForUpdate();
+ 
+-        // run the SQL now that it is built
+-        EntityValueBase newEntityValue = null;
+-        try {
++
++        //try {
+             // don't check create, above tableExists check is done:
+             // efi.getEntityDbMeta().checkTableRuntime(ed)
+             // if this is a view-entity and any table in it exists check/create all or will fail with optional members, etc
+@@ -96,10 +96,10 @@ public class EntityFindImpl extends EntityFindBase {
+ 
+             if (isTraceEnabled && rs.next()) logger.trace("Found more than one result for condition " + condSql + " on entity " + entityName);
+             queryTextList.add(efb.finalSql);
+-        } finally {
++        } /*finally {
+             try { efb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error closing query", sqle); }
+-        }
++        }*/
+ 
+         return newEntityValue;
+     }
+@@ -113,7 +113,9 @@ public class EntityFindImpl extends EntityFindBase {
+         // table doesn't exist, just return empty ELI
+         if (!ed.tableExistsDbMetaOnly()) return new EntityListIteratorWrapper(new ArrayList<>(), ed, efi, null, null);
+ 
+-        EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray);
++        // run the SQL now that it is built
++        EntityListIteratorImpl elii;
++        try (EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray)) {
+         if (getDistinct()) efb.makeDistinct();
+ 
+         // select fields
+@@ -135,9 +137,8 @@ public class EntityFindImpl extends EntityFindBase {
+         // FOR UPDATE
+         if (getForUpdate()) efb.makeForUpdate();
+ 
+-        // run the SQL now that it is built
+-        EntityListIteratorImpl elii;
+-        try {
++
++        //try {
+             // don't check create, above tableExists check is done:
+             // efi.getEntityDbMeta().checkTableRuntime(ed)
+             // if this is a view-entity and any table in it exists check/create all or will fail with optional members, etc
+@@ -154,8 +155,8 @@ public class EntityFindImpl extends EntityFindBase {
+             queryTextList.add(efb.finalSql);
+         } catch (Throwable t) {
+             // close the ResultSet/etc on error as there won't be an ELI
+-            try { efb.closeAll(); }
+-            catch (SQLException sqle) { logger.error("Error closing query", sqle); }
++            /*try { efb.closeAll(); }
++            catch (SQLException sqle) { logger.error("Error closing query", sqle); }*/
+             throw t;
+         }
+         // no finally block to close ResultSet, etc because contained in EntityListIterator and closed with it
+@@ -170,8 +171,9 @@ public class EntityFindImpl extends EntityFindBase {
+ 
+         // table doesn't exist, just return 0
+         if (!ed.tableExistsDbMetaOnly()) return 0;
+-
+-        EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray);
++// run the SQL now that it is built
++        long count = 0;
++        try (EntityFindBuilder efb = new EntityFindBuilder(ed, this, whereCondition, fieldInfoArray)) {
+ 
+         ArrayList<MNode> entityConditionList = ed.internalEntityNode.children("entity-condition");
+         MNode condNode = entityConditionList != null && entityConditionList.size() > 0 ? entityConditionList.get(0) : null;
+@@ -191,9 +193,8 @@ public class EntityFindImpl extends EntityFindBase {
+ 
+         efb.closeCountSubSelect(fieldInfoArray.length, isDistinct, isGroupBy);
+ 
+-        // run the SQL now that it is built
+-        long count = 0;
+-        try {
++
++        //try {
+             // don't check create, above tableExists check is done:
+             // efi.getEntityDbMeta().checkTableRuntime(ed)
+             // if this is a view-entity and any table in it exists check/create all or will fail with optional members, etc
+@@ -206,10 +207,10 @@ public class EntityFindImpl extends EntityFindBase {
+             ResultSet rs = efb.executeQuery();
+             if (rs.next()) count = rs.getLong(1);
+             queryTextList.add(efb.finalSql);
+-        } finally {
++        } /*finally {
+             try { efb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error closing query", sqle); }
+-        }
++        }*/
+ 
+         return count;
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityQueryBuilder.java framework/src/main/groovy/org/moqui/impl/entity/EntityQueryBuilder.java
+index 380e4730..304fb01b 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityQueryBuilder.java
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityQueryBuilder.java
+@@ -28,7 +28,7 @@ import java.util.ArrayList;
+ import java.util.concurrent.Future;
+ import java.util.concurrent.TimeUnit;
+ 
+-public class EntityQueryBuilder implements Runnable {
++public class EntityQueryBuilder implements Runnable, AutoCloseable {
+     protected static final Logger logger = LoggerFactory.getLogger(EntityQueryBuilder.class);
+     static final boolean isDebugEnabled = logger.isDebugEnabled();
+ 
+@@ -191,6 +191,11 @@ public class EntityQueryBuilder implements Runnable {
+         return rowsUpdated;
+     }
+ 
++    @Override
++    public void close() throws SQLException {
++        // do nothing! see closeInternal
++        closeAll();
++    }
+     /** NOTE: this should be called in a finally clause to make sure things are closed */
+     void closeAll() throws SQLException {
+         if (ps != null) {
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityValueImpl.java framework/src/main/groovy/org/moqui/impl/entity/EntityValueImpl.java
+index 8dfdfcbb..29d0ef56 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityValueImpl.java
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityValueImpl.java
+@@ -59,7 +59,7 @@ public class EntityValueImpl extends EntityValueBase {
+         EntityFacadeImpl efi = getEntityFacadeImpl();
+         if (ed.isViewEntity) throw new EntityException("Create not yet implemented for view-entity");
+ 
+-        EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
++        try (EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi)) {
+         StringBuilder sql = eqb.sqlTopLevel;
+         sql.append("INSERT INTO ").append(ed.getFullTableName()).append(" (");
+ 
+@@ -80,7 +80,7 @@ public class EntityValueImpl extends EntityValueBase {
+ 
+         sql.append(") VALUES (").append(values.toString()).append(")");
+ 
+-        try {
++        //try {
+             efi.getEntityDbMeta().checkTableRuntime(ed);
+ 
+             if (con != null) eqb.useConnection(con);
+@@ -99,12 +99,12 @@ public class EntityValueImpl extends EntityValueBase {
+             String txName = "[could not get]";
+             try { txName = efi.ecfi.transactionFacade.getTransactionManager().getTransaction().toString(); }
+             catch (Exception txe) { if (logger.isTraceEnabled()) logger.trace("Error getting transaction name: " + txe.toString()); }
+-            logger.warn("Error creating " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
++            //logger.warn("Error creating " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
+             throw e;
+-        } finally {
++        } /*finally {
+             try { eqb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error in JDBC close in create of " + this.toString(), sqle); }
+-        }
++        }*/
+     }
+ 
+     @SuppressWarnings("MismatchedQueryAndUpdateOfStringBuilder")
+@@ -114,7 +114,7 @@ public class EntityValueImpl extends EntityValueBase {
+         final EntityFacadeImpl efi = getEntityFacadeImpl();
+         if (ed.isViewEntity) throw new EntityException("Update not yet implemented for view-entity");
+ 
+-        final EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
++        try (final EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi)) {
+         ArrayList<EntityConditionParameter> parameters = eqb.parameters;
+         StringBuilder sql = eqb.sqlTopLevel;
+         sql.append("UPDATE ").append(ed.getFullTableName()).append(" SET ");
+@@ -130,7 +130,7 @@ public class EntityValueImpl extends EntityValueBase {
+ 
+         eqb.addWhereClause(pkFieldArray, valueMapInternal);
+ 
+-        try {
++        //try {
+             efi.getEntityDbMeta().checkTableRuntime(ed);
+ 
+             if (con != null) eqb.useConnection(con);
+@@ -146,12 +146,12 @@ public class EntityValueImpl extends EntityValueBase {
+             String txName = "[could not get]";
+             try { txName = efi.ecfi.transactionFacade.getTransactionManager().getTransaction().toString(); }
+             catch (Exception txe) { if (logger.isTraceEnabled()) logger.trace("Error getting transaction name: " + txe.toString()); }
+-            logger.warn("Error updating " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
++            //logger.warn("Error updating " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
+             throw e;
+-        } finally {
++        } /*finally {
+             try { eqb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error in JDBC close in update of " + this.toString(), sqle); }
+-        }
++        }*/
+     }
+ 
+     @SuppressWarnings("MismatchedQueryAndUpdateOfStringBuilder")
+@@ -161,14 +161,14 @@ public class EntityValueImpl extends EntityValueBase {
+         EntityFacadeImpl efi = getEntityFacadeImpl();
+         if (ed.isViewEntity) throw new EntityException("Delete not implemented for view-entity");
+ 
+-        EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
++        try (EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi)) {
+         StringBuilder sql = eqb.sqlTopLevel;
+         sql.append("DELETE FROM ").append(ed.getFullTableName());
+ 
+         FieldInfo[] pkFieldArray = ed.entityInfo.pkFieldInfoArray;
+         eqb.addWhereClause(pkFieldArray, valueMapInternal);
+ 
+-        try {
++        //try {
+             efi.getEntityDbMeta().checkTableRuntime(ed);
+ 
+             if (con != null) eqb.useConnection(con);
+@@ -180,12 +180,12 @@ public class EntityValueImpl extends EntityValueBase {
+             String txName = "[could not get]";
+             try { txName = efi.ecfi.transactionFacade.getTransactionManager().getTransaction().toString(); }
+             catch (Exception txe) { if (logger.isTraceEnabled()) logger.trace("Error getting transaction name: " + txe.toString()); }
+-            logger.warn("Error deleting " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
++            //logger.warn("Error deleting " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
+             throw e;
+-        } finally {
++        } /*finally {
+             try { eqb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error in JDBC close in delete of " + this.toString(), sqle); }
+-        }
++        }*/
+     }
+ 
+     @SuppressWarnings("MismatchedQueryAndUpdateOfStringBuilder")
+@@ -203,8 +203,8 @@ public class EntityValueImpl extends EntityValueBase {
+         FieldInfo[] pkFieldArray = entityInfo.pkFieldInfoArray;
+         FieldInfo[] allFieldArray = entityInfo.allFieldInfoArray;
+         // NOTE: even if there are no non-pk fields do a refresh in order to see if the record exists or not
+-
+-        EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi);
++        boolean retVal = false;
++        try (EntityQueryBuilder eqb = new EntityQueryBuilder(ed, efi)) {
+         ArrayList<EntityConditionParameter> parameters = eqb.parameters;
+         StringBuilder sql = eqb.sqlTopLevel;
+         sql.append("SELECT ");
+@@ -220,8 +220,8 @@ public class EntityValueImpl extends EntityValueBase {
+             parameters.add(new EntityConditionParameter(fi, valueMapInternal.getByIString(fi.name, fi.index), eqb));
+         }
+ 
+-        boolean retVal = false;
+-        try {
++
++        //try {
+             // don't check create, above tableExists check is done:
+             // efi.getEntityDbMeta().checkTableRuntime(ed)
+             // if this is a view-entity and any table in it exists check/create all or will fail with optional members, etc
+@@ -249,12 +249,12 @@ public class EntityValueImpl extends EntityValueBase {
+             String txName = "[could not get]";
+             try { txName = efi.ecfi.transactionFacade.getTransactionManager().getTransaction().toString(); }
+             catch (Exception txe) { if (logger.isTraceEnabled()) logger.trace("Error getting transaction name: " + txe.toString()); }
+-            logger.warn("Error finding " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
++            //logger.warn("Error finding " + this.toString() + " tx " + txName + " con " + eqb.connection.toString() + ": " + e.toString());
+             throw e;
+-        } finally {
++        } /*finally {
+             try { eqb.closeAll(); }
+             catch (SQLException sqle) { logger.error("Error in JDBC close in refresh of " + this.toString(), sqle); }
+-        }
++        }*/
+ 
+         return retVal;
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/entity/FieldInfo.java framework/src/main/groovy/org/moqui/impl/entity/FieldInfo.java
+index f7908c2f..52919f8c 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/FieldInfo.java
++++ framework/src/main/groovy/org/moqui/impl/entity/FieldInfo.java
+@@ -354,19 +354,13 @@ public class FieldInfo {
+                     logger.warn("Got byte array back empty for serialized Object with length [" + originalBytes.length + "] for field [" + name + "] (" + index + ")");
+                 }
+                 if (binaryInput != null) {
+-                    ObjectInputStream inStream = null;
+-                    try {
+-                        inStream = new ObjectInputStream(binaryInput);
++
++                    try (ObjectInputStream inStream = new ObjectInputStream(binaryInput)) {
+                         obj = inStream.readObject();
+                     } catch (IOException ex) {
+                         if (logger.isTraceEnabled()) logger.trace("Unable to read BLOB from input stream for field [" + name + "] (" + index + "): " + ex.toString());
+                     } catch (ClassNotFoundException ex) {
+                         if (logger.isTraceEnabled()) logger.trace("Class not found: Unable to cast BLOB data to an Java object for field [" + name + "] (" + index + "); most likely because it is a straight byte[], so just using the raw bytes: " + ex.toString());
+-                    } finally {
+-                        if (inStream != null) {
+-                            try { inStream.close(); }
+-                            catch (IOException e) { logger.error("Unable to close binary input stream for field [" + name + "] (" + index + "): " + e.toString(), e); }
+-                        }
+                     }
+                 }
+                 if (obj != null) {
+@@ -548,17 +542,14 @@ public class FieldInfo {
+                 case 10: if (value != null) { ps.setBoolean(index, (Boolean) value); } else { ps.setNull(index, Types.BOOLEAN); } break;
+                 case 11:
+                     if (value != null) {
+-                        try {
+-                            ByteArrayOutputStream os = new ByteArrayOutputStream();
+-                            ObjectOutputStream oos = new ObjectOutputStream(os);
++                        try (ByteArrayOutputStream os = new ByteArrayOutputStream();
++                             ObjectOutputStream oos = new ObjectOutputStream(os);) {
+                             oos.writeObject(value);
+-                            oos.close();
+                             byte[] buf = os.toByteArray();
+-                            os.close();
+ 
+-                            ByteArrayInputStream is = new ByteArrayInputStream(buf);
++                            try (ByteArrayInputStream is = new ByteArrayInputStream(buf)) {
+                             ps.setBinaryStream(index, is, buf.length);
+-                            is.close();
++                            }
+                         } catch (IOException ex) {
+                             throw new EntityException("Error setting serialized object, for field " + entityName + "." + name, ex);
+                         }
+diff --git framework/src/main/groovy/org/moqui/impl/screen/ScreenFacadeImpl.groovy framework/src/main/groovy/org/moqui/impl/screen/ScreenFacadeImpl.groovy
+index 42070e4c..196cf866 100644
+--- framework/src/main/groovy/org/moqui/impl/screen/ScreenFacadeImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/screen/ScreenFacadeImpl.groovy
+@@ -300,10 +300,13 @@ class ScreenFacadeImpl implements ScreenFacade {
+ 
+     protected synchronized MNode makeWidgetTemplatesNodeByLocation(String templateLocation) {
+         MNode templatesNode = (MNode) widgetTemplateLocationCache.get(templateLocation)
++        try (InputStream is = ecfi.resourceFacade.getLocationStream(templateLocation)) {
+         if (templatesNode != null) return templatesNode
+ 
+-        templatesNode = MNode.parse(templateLocation, ecfi.resourceFacade.getLocationStream(templateLocation))
++        //templatesNode = MNode.parse(templateLocation, ecfi.resourceFacade.getLocationStream(templateLocation))
++        templatesNode = MNode.parse(templateLocation, is)
+         widgetTemplateLocationCache.put(templateLocation, templatesNode)
++        }
+         return templatesNode
+     }
+ 
+diff --git framework/src/main/groovy/org/moqui/impl/screen/ScreenForm.groovy framework/src/main/groovy/org/moqui/impl/screen/ScreenForm.groovy
+index 8a6864ea..f3f5e33c 100644
+--- framework/src/main/groovy/org/moqui/impl/screen/ScreenForm.groovy
++++ framework/src/main/groovy/org/moqui/impl/screen/ScreenForm.groovy
+@@ -1215,13 +1215,10 @@ class ScreenForm {
+             } else if ("list-options".equals(childNode.name)) {
+                 Object listObject = ec.resource.expression(childNode.attribute('list'), null)
+                 if (listObject instanceof EntityListIterator) {
+-                    EntityListIterator eli
+-                    try {
+-                        eli = (EntityListIterator) listObject
++
++                    try (EntityListIterator eli = (EntityListIterator) listObject) {
+                         EntityValue ev
+                         while ((ev = eli.next()) != null) addFieldOption(options, fieldNode, childNode, ev, ec)
+-                    } finally {
+-                        eli.close()
+                     }
+                 } else {
+                     String keyAttr = childNode.attribute("key")
+diff --git framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
+index eb40bf57..16d84343 100644
+--- framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
+@@ -635,9 +635,8 @@ class ScreenRenderImpl implements ScreenRender {
+                         response.setHeader("Cache-Control", "max-age=86400, must-revalidate, public")
+                     }
+ 
+-                    InputStream is
+-                    try {
+-                        is = fileResourceRef.openStream()
++
++                    try (InputStream is = fileResourceRef.openStream()) {
+                         OutputStream os = response.outputStream
+                         int totalLen = ObjectUtilities.copyStream(is, os)
+ 
+@@ -647,8 +646,6 @@ class ScreenRenderImpl implements ScreenRender {
+                                     resourceStartTime, (System.nanoTime() - startTimeNanos)/1000000.0D, (long) totalLen)
+                         }
+                         if (isTraceEnabled) logger.trace("Sent binary response of length ${totalLen} from file ${fileResourceRef.location} for request to ${screenUrlInstance.url}")
+-                    } finally {
+-                        if (is != null) is.close()
+                     }
+                 } else {
+                     throw new BaseArtifactException("Tried to get binary content at ${screenUrlInfo.fileResourcePathList} under screen ${screenUrlInfo.targetScreen.location}, but there is no HTTP response available")
+@@ -2218,7 +2215,7 @@ class ScreenRenderImpl implements ScreenRender {
+         // if no user theme see if group a user is in has a theme
+         if (themeId == null || themeId.length() == 0) {
+             // use reverse alpha so ALL_USERS goes last...
+-            List<String> userGroupIdSet = new ArrayList(new TreeSet(ec.user.getUserGroupIdSet())).reverse(true)
++            List<String> userGroupIdSet = new ArrayList<String>(new TreeSet<String>(ec.user.getUserGroupIdSet())).reverse(true)
+             EntityList groupThemeList = entityFacade.find("moqui.security.UserGroupScreenTheme")
+                     .condition("userGroupId", "in", userGroupIdSet).condition("screenThemeTypeEnumId", stteId)
+                     .orderBy("sequenceNum,-userGroupId").useCache(true).disableAuthz().list()
+diff --git framework/src/main/groovy/org/moqui/impl/screen/ScreenUrlInfo.groovy framework/src/main/groovy/org/moqui/impl/screen/ScreenUrlInfo.groovy
+index ec31ef40..bd2f8cf0 100644
+--- framework/src/main/groovy/org/moqui/impl/screen/ScreenUrlInfo.groovy
++++ framework/src/main/groovy/org/moqui/impl/screen/ScreenUrlInfo.groovy
+@@ -877,7 +877,7 @@ class ScreenUrlInfo {
+         if (startsWithSlash && screenPath.startsWith("//")) {
+             // find the screen by name
+             String trimmedFromPath = screenPath.substring(2)
+-            ArrayList<String> originalPathNameList = new ArrayList<String>(trimmedFromPath.split("/") as List)
++            ArrayList<String> originalPathNameList = new ArrayList<String>(Arrays.asList(trimmedFromPath.split("/")))
+             originalPathNameList = cleanupPathNameList(originalPathNameList, inlineParameters)
+ 
+             if (sfi.screenFindPathCache.containsKey(screenPath)) {
+diff --git framework/src/main/groovy/org/moqui/impl/service/runner/EntityAutoServiceRunner.groovy framework/src/main/groovy/org/moqui/impl/service/runner/EntityAutoServiceRunner.groovy
+index e84b4c40..1025753c 100644
+--- framework/src/main/groovy/org/moqui/impl/service/runner/EntityAutoServiceRunner.groovy
++++ framework/src/main/groovy/org/moqui/impl/service/runner/EntityAutoServiceRunner.groovy
+@@ -447,7 +447,6 @@ class EntityAutoServiceRunner implements ServiceRunner {
+             result.put("statusChanged", !(lookedUpValue.getNoCheckSimple("statusId") == parameters.get("statusId")))
+             // logger.warn("========= oldStatusId=${result.oldStatusId}, statusChanged=${result.statusChanged}, lookedUpValue.statusId=${lookedUpValue.statusId}, parameters.statusId=${parameters.statusId}, lookedUpValue=${lookedUpValue}")
+         }
+-
+         // do the StatusValidChange check
+         String parameterStatusId = (String) parameters.get("statusId")
+         if (parameterStatusId) {
+diff --git framework/src/main/groovy/org/moqui/impl/tools/JackrabbitRunToolFactory.groovy framework/src/main/groovy/org/moqui/impl/tools/JackrabbitRunToolFactory.groovy
+index a2f83051..ddb3ad44 100644
+--- framework/src/main/groovy/org/moqui/impl/tools/JackrabbitRunToolFactory.groovy
++++ framework/src/main/groovy/org/moqui/impl/tools/JackrabbitRunToolFactory.groovy
+@@ -46,7 +46,7 @@ class JackrabbitRunToolFactory implements ToolFactory<Process> {
+         Properties jackrabbitProperties = new Properties()
+         URL jackrabbitProps = this.class.getClassLoader().getResource("jackrabbit_moqui.properties")
+         if (jackrabbitProps != null) {
+-            InputStream is = jackrabbitProps.openStream(); jackrabbitProperties.load(is); is.close();
++            try (InputStream is = jackrabbitProps.openStream()) { jackrabbitProperties.load(is); }
+         }
+ 
+         String jackrabbitWorkingDir = System.getProperty("moqui.jackrabbit_working_dir")
+@@ -99,14 +99,10 @@ class JackrabbitRunToolFactory implements ToolFactory<Process> {
+     ExecutionContextFactory getEcf() { return ecf }
+ 
+     private static boolean hostAvailabilityCheck(String hostname, int port) {
+-        Socket s = null
+-        try {
+-            s = new Socket(hostname, port)
++        try (Socket s = new Socket(hostname, port)) {
+             return true
+         } catch (IOException e ) {
+             /* ignore */
+-        } finally {
+-            if (s != null) try { s.close() } catch (Exception e) {}
+         }
+         return false
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/util/JdbcExtractor.java framework/src/main/groovy/org/moqui/impl/util/JdbcExtractor.java
+index ca682a25..f15a0c52 100644
+--- framework/src/main/groovy/org/moqui/impl/util/JdbcExtractor.java
++++ framework/src/main/groovy/org/moqui/impl/util/JdbcExtractor.java
+@@ -60,14 +60,11 @@ public class JdbcExtractor implements SimpleEtl.Extractor {
+         this.etl = etl;
+ 
+         XAConnection xacon = null;
+-        Connection con = null;
+-        Statement stmt = null;
+-        ResultSet rs = null;
+         try {
+             xacon = eci.getEntityFacade().getConfConnection(confMap);
+-            con = xacon.getConnection();
+-            stmt = con.createStatement();
+-            rs = stmt.executeQuery(selectSql);
++            try (Connection con = xacon.getConnection();
++                 Statement stmt = con.createStatement();
++                 ResultSet rs = stmt.executeQuery(selectSql)) {
+             ResultSetMetaData rsmd = rs.getMetaData();
+             int columnCount = rsmd.getColumnCount();
+             String[] columnNames = new String[columnCount];
+@@ -84,12 +81,10 @@ public class JdbcExtractor implements SimpleEtl.Extractor {
+                     break;
+                 }
+             }
++            }
+         } catch (Exception e) {
+             throw new BaseException("Error in SQL query " + selectSql, e);
+         } finally {
+-            if (rs != null) rs.close();
+-            if (stmt != null) stmt.close();
+-            if (con != null) con.close();
+             if (xacon != null) xacon.close();
+         }
+     }
+diff --git framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy
+index 9d4c3749..bc8a99f2 100644
+--- framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy
++++ framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy
+@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
+ import javax.servlet.http.HttpSession
+ import javax.websocket.*
+ import javax.websocket.server.HandshakeRequest
++import java.nio.channels.ClosedChannelException
+ 
+ /**
+  * An abstract class for WebSocket Endpoint that does basic setup, including creating an ExecutionContext with the user
+@@ -108,6 +109,8 @@ abstract class MoquiAbstractEndpoint extends Endpoint implements MessageHandler.
+     void onError(Session session, Throwable thr) {
+         if (thr instanceof SocketTimeoutException || (thr.getMessage() != null && thr.getMessage().toLowerCase().contains("timeout"))) {
+             logger.info("Timeout in WebSocket Session ${session.getId()}, User ${userId} (${username}): ${thr.getMessage()}")
++        } else if (thr instanceof ClosedChannelException) {
++            logger.info("WebSocket channel closed unexpectedly. ${session.getId()}, User ${userId} (${username}): ${thr.getMessage()}")
+         } else {
+             logger.warn("Error in WebSocket Session ${session.getId()}, User ${userId} (${username})", thr)
+         }
+diff --git framework/src/main/java/org/moqui/entity/EntityDataLoader.java framework/src/main/java/org/moqui/entity/EntityDataLoader.java
+index 7ad4cfe3..63447b92 100644
+--- framework/src/main/java/org/moqui/entity/EntityDataLoader.java
++++ framework/src/main/java/org/moqui/entity/EntityDataLoader.java
+@@ -96,6 +96,7 @@ public interface EntityDataLoader {
+     EntityDataLoader csvDelimiter(char delimiter);
+     EntityDataLoader csvCommentStart(char commentStart);
+     EntityDataLoader csvQuoteChar(char quoteChar);
++    EntityDataLoader csvEscapeChar(char escapeChar);
+ 
+     /** For CSV files use this name (entity or service name) instead of looking for it on line one in the file */
+     EntityDataLoader csvEntityName(String entityName);
+diff --git framework/src/main/java/org/moqui/entity/EntityDynamicView.java framework/src/main/java/org/moqui/entity/EntityDynamicView.java
+index 39345f5c..4ba72ea6 100644
+--- framework/src/main/java/org/moqui/entity/EntityDynamicView.java
++++ framework/src/main/java/org/moqui/entity/EntityDynamicView.java
+@@ -29,6 +29,8 @@ public interface EntityDynamicView {
+ 
+     EntityDynamicView addMemberEntity(String entityAlias, String entityName, String joinFromAlias,
+                                              Boolean joinOptional, Map<String, String> entityKeyMaps);
++    EntityDynamicView addMemberEntity(String entityAlias, String entityName, String joinFromAlias, Boolean joinOptional,
++                                             Map<String, String> entityKeyMaps, List<Map<String, String>> entityConditions, String subSelect);
+ 
+     EntityDynamicView addRelationshipMember(String entityAlias, String joinFromAlias, String relationshipName,
+                                                    Boolean joinOptional);
+@@ -42,6 +44,11 @@ public interface EntityDynamicView {
+     /** Add an alias, full detail. All parameters can be null except entityAlias and name. */
+     EntityDynamicView addAlias(String entityAlias, String name, String field, String function);
+ 
++    EntityDynamicView addAlias(String entityAlias, String name, String field, String function, String defaultDisplay, String isAggregate);
++
+     EntityDynamicView addRelationship(String type, String title, String relatedEntityName,
+                                              Map<String, String> entityKeyMaps);
++    EntityDynamicView addWhereConditions(List<Map<String, Object>> conditions);
++
++    EntityDynamicView addHavingConditions(List<Map<String, Object>> havingConditions);
+ }
+diff --git framework/src/main/java/org/moqui/etl/FlatXmlExtractor.java framework/src/main/java/org/moqui/etl/FlatXmlExtractor.java
+index 4ae39375..2f83a0a9 100644
+--- framework/src/main/java/org/moqui/etl/FlatXmlExtractor.java
++++ framework/src/main/java/org/moqui/etl/FlatXmlExtractor.java
+@@ -44,19 +44,15 @@ public class FlatXmlExtractor implements SimpleEtl.Extractor {
+             logger.warn("Resource does not exist, not extracting data from " + (resourceRef != null ? resourceRef.getLocation() : "[null ResourceReference]"));
+             return;
+         }
+-        InputStream is = resourceRef.openStream();
+-        if (is == null) return;
+ 
+-        try {
++        try (InputStream is = resourceRef.openStream();) {
++            if (is == null) return;
+             FlatXmlHandler xmlHandler = new FlatXmlHandler(this);
+             XMLReader reader = SAXParserFactory.newInstance().newSAXParser().getXMLReader();
+             reader.setContentHandler(xmlHandler);
+             reader.parse(new InputSource(is));
+         } catch (Exception e) {
+             throw new BaseException("Error parsing XML from " + resourceRef.getLocation(), e);
+-        } finally {
+-            try { is.close(); }
+-            catch (IOException e) { logger.error("Error closing XML stream from " + resourceRef.getLocation(), e); }
+         }
+ 
+     }
+diff --git framework/src/main/java/org/moqui/resource/UrlResourceReference.java framework/src/main/java/org/moqui/resource/UrlResourceReference.java
+index b4810612..baf9579a 100644
+--- framework/src/main/java/org/moqui/resource/UrlResourceReference.java
++++ framework/src/main/java/org/moqui/resource/UrlResourceReference.java
+@@ -198,10 +198,8 @@ public class UrlResourceReference extends ResourceReference {
+         File curFile = getFile();
+         if (!curFile.getParentFile().exists()) curFile.getParentFile().mkdirs();
+         // now write the text to the file and close it
+-        try {
+-            Writer fw = new OutputStreamWriter(new FileOutputStream(curFile), StandardCharsets.UTF_8);
++        try (Writer fw = new OutputStreamWriter(new FileOutputStream(curFile), StandardCharsets.UTF_8);) {
+             fw.write(text);
+-            fw.close();
+             this.exists = null;
+         } catch (IOException e) {
+             throw new BaseException("Error writing text to file " + curFile.getAbsolutePath(), e);
+@@ -217,11 +215,9 @@ public class UrlResourceReference extends ResourceReference {
+         File curFile = getFile();
+         if (!curFile.getParentFile().exists()) curFile.getParentFile().mkdirs();
+ 
+-        try {
+-            OutputStream os = new FileOutputStream(curFile);
++        try (OutputStream os = new FileOutputStream(curFile)) {
+             ObjectUtilities.copyStream(stream, os);
+             stream.close();
+-            os.close();
+             this.exists = null;
+         } catch (IOException e) {
+             throw new BaseException("Error writing stream to file " + curFile.getAbsolutePath(), e);
+diff --git framework/src/main/java/org/moqui/util/MClassLoader.java framework/src/main/java/org/moqui/util/MClassLoader.java
+index 850d1354..6602ec79 100644
+--- framework/src/main/java/org/moqui/util/MClassLoader.java
++++ framework/src/main/java/org/moqui/util/MClassLoader.java
+@@ -495,38 +495,30 @@ public class MClassLoader extends ClassLoader {
+     }
+     @SuppressWarnings("ThrowFromFinallyBlock")
+     private byte[] getJarEntryBytes(JarFile jarFile, JarEntry je) throws IOException {
+-        DataInputStream dis = null;
+         byte[] jeBytes = null;
+-        try {
+             long lSize = je.getSize();
+             if (lSize <= 0 || lSize >= Integer.MAX_VALUE)
+                 throw new IllegalArgumentException("Size [" + lSize + "] not valid for jar entry [" + je + "]");
+             jeBytes = new byte[(int) lSize];
+-            InputStream is = jarFile.getInputStream(je);
+-            dis = new DataInputStream(is);
++            try (InputStream is = jarFile.getInputStream(je);
++            DataInputStream dis = new DataInputStream(is)) {
+             dis.readFully(jeBytes);
+-        } finally {
+-            if (dis != null) dis.close();
+-        }
++            }
+         return jeBytes;
+     }
+ 
+     @SuppressWarnings("ThrowFromFinallyBlock")
+     private byte[] getFileBytes(File classFile) throws IOException {
+-        DataInputStream dis = null;
+         byte[] jeBytes = null;
+-        try {
+             long lSize = classFile.length();
+             if (lSize <= 0  ||  lSize >= Integer.MAX_VALUE) {
+                 throw new IllegalArgumentException("Size [" + lSize + "] not valid for classpath file [" + classFile + "]");
+             }
+             jeBytes = new byte[(int)lSize];
+-            InputStream is = new FileInputStream(classFile);
+-            dis = new DataInputStream(is);
++            try (InputStream is = new FileInputStream(classFile);
++                 DataInputStream dis = new DataInputStream(is);) {
+             dis.readFully(jeBytes);
+-        } finally {
+-            if (dis != null) dis.close();
+-        }
++            }
+         return jeBytes;
+     }
+ 
+diff --git framework/src/main/java/org/moqui/util/MNode.java framework/src/main/java/org/moqui/util/MNode.java
+index 141a0531..a78d51d5 100644
+--- framework/src/main/java/org/moqui/util/MNode.java
++++ framework/src/main/java/org/moqui/util/MNode.java
+@@ -55,19 +55,25 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
+         MNode cached = parsedNodeCache.get(location);
+         if (cached != null && cached.lastModified >= rr.getLastModified()) return cached;
+ 
+-        MNode node = parse(location, rr.openStream());
++        //MNode node = parse(location, rr.openStream());
++        try (InputStream is = rr.openStream()) {
++        MNode node = parse(location, is);
+         node.lastModified = rr.getLastModified();
+         if (node.lastModified > 0) parsedNodeCache.put(location, node);
+         return node;
++        } catch (IOException e) {
++            throw new BaseException(e);
++        }
+     }
+     /** Parse from an InputStream and close the stream */
+     public static MNode parse(String location, InputStream is) throws BaseException {
+         if (is == null) return null;
+-        try {
+-            return parse(location, new InputSource(new InputStreamReader(is, UTF_8)));
+-        } finally {
+-            try { is.close(); }
+-            catch (IOException e) { logger.error("Error closing XML stream from " + location, e); }
++
++        try (InputStreamReader reader = new InputStreamReader(is, UTF_8)) {
++            return parse(location, new InputSource(reader));
++        } catch (IOException e) {
++            logger.error("Error closing XML stream from " + location, e);
++            throw new BaseException("Error parsing XML stream from " + location, e);
+         }
+     }
+     public static MNode parse(File fl) throws BaseException {
+@@ -77,18 +83,14 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
+         MNode cached = parsedNodeCache.get(location);
+         if (cached != null && cached.lastModified >= fl.lastModified()) return cached;
+ 
+-        BufferedReader fr = null;
+-        try {
+-            fr = Files.newBufferedReader(fl.toPath(), UTF_8); // new FileReader(fl);
++
++        try (BufferedReader fr = Files.newBufferedReader(fl.toPath(), UTF_8);) {
+             MNode node = parse(fl.getPath(), new InputSource(fr));
+             node.lastModified = fl.lastModified();
+             if (node.lastModified > 0) parsedNodeCache.put(location, node);
+             return node;
+         } catch (Exception e) {
+             throw new BaseException("Error parsing XML file at " + fl.getPath(), e);
+-        } finally {
+-            try { if (fr != null) fr.close(); }
+-            catch (IOException e) { logger.error("Error closing XML file at " + fl.getPath(), e); }
+         }
+     }
+     public static MNode parseText(String location, String text) throws BaseException {
+@@ -109,16 +111,13 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
+     }
+ 
+     public static MNode parseRootOnly(ResourceReference rr) {
+-        InputStream is = rr.openStream();
+-        if (is == null) return null;
+-        try {
++        try (InputStream is = rr.openStream();) {
++            if (is == null) return null;
+             return parseRootOnly(rr.getLocation(), new InputSource(is));
+-        } finally {
+-            if (is != null) {
+-                try { is.close(); }
+-                catch (IOException e) { logger.error("Error closing XML stream from " + rr.getLocation(), e); }
+-            }
++        } catch (IOException e) {
++            logger.error("Error closing XML stream from " + rr.getLocation(), e);
+         }
++        return null;
+     }
+     public static MNode parseRootOnly(String location, InputSource isrc) {
+         try {
+diff --git framework/src/main/java/org/moqui/util/ObjectUtilities.java framework/src/main/java/org/moqui/util/ObjectUtilities.java
+index 16a9c275..5b9214cc 100644
+--- framework/src/main/java/org/moqui/util/ObjectUtilities.java
++++ framework/src/main/java/org/moqui/util/ObjectUtilities.java
+@@ -238,9 +238,7 @@ public class ObjectUtilities {
+     public static String getStreamText(InputStream is) { return getStreamText(is, StandardCharsets.UTF_8); }
+     public static String getStreamText(InputStream is, Charset charset) {
+         if (is == null) return null;
+-        Reader r = null;
+-        try {
+-            r = new InputStreamReader(new BufferedInputStream(is), charset);
++        try (Reader r = new InputStreamReader(new BufferedInputStream(is), charset);) {
+ 
+             StringBuilder sb = new StringBuilder();
+             char[] buf = new char[4096];
+@@ -249,12 +247,6 @@ public class ObjectUtilities {
+             return sb.toString();
+         } catch (IOException e) {
+             throw new BaseException("Error getting stream text", e);
+-        } finally {
+-            try {
+-                if (r != null) r.close();
+-            } catch (IOException e) {
+-                logger.warn("Error in close after reading text from stream", e);
+-            }
+         }
+     }
+ 
+diff --git framework/src/main/java/org/moqui/util/RestClient.java framework/src/main/java/org/moqui/util/RestClient.java
+index 46b389f7..7bc83fc3 100644
+--- framework/src/main/java/org/moqui/util/RestClient.java
++++ framework/src/main/java/org/moqui/util/RestClient.java
+@@ -311,7 +311,7 @@ public class RestClient {
+         try {
+             Request request = makeRequest(tempFactory != null ? tempFactory : (overrideRequestFactory != null ? overrideRequestFactory : getDefaultRequestFactory()));
+             if (timeoutSeconds < 2) timeoutSeconds = 2;
+-            request.idleTimeout(timeoutSeconds > 30 ? 30 : timeoutSeconds-1, TimeUnit.SECONDS);
++            request.idleTimeout(timeoutSeconds-1, TimeUnit.SECONDS);
+             // use a FutureResponseListener so we can set the timeout and max response size (old: response = request.send(); )
+             FutureResponseListener listener = new FutureResponseListener(request, maxResponseSize);
+             try {
+diff --git framework/src/main/java/org/moqui/util/WebUtilities.java framework/src/main/java/org/moqui/util/WebUtilities.java
+index a9a7aa89..a734154d 100644
+--- framework/src/main/java/org/moqui/util/WebUtilities.java
++++ framework/src/main/java/org/moqui/util/WebUtilities.java
+@@ -292,11 +292,11 @@ public class WebUtilities {
+ 
+     /** Looks for byte patterns for Windows Portable Executable (4d5a), Linux ELF (7f454c46), Java class (cafebabe), macOS (feedface) */
+     public static boolean isExecutable(FileItem item) throws IOException {
+-        InputStream is = item.getInputStream();
+-        byte[] bytes = new byte[4];
+-        is.read(bytes, 0, 4);
+-        is.close();
+-        return isExecutable(bytes);
++        try (InputStream is = item.getInputStream()) {
++            byte[] bytes = new byte[4];
++            is.read(bytes, 0, 4);
++            return isExecutable(bytes);
++        }
+     }
+     /** Looks for byte patterns for Windows Portable Executable (4d5a), Linux ELF (7f454c46), Java class (cafebabe), macOS (feedface) */
+     public static boolean isExecutable(byte[] bytes) {
+@@ -406,10 +406,8 @@ public class WebUtilities {
+         /* for testing purposes only, don't enable by default: */
+         // logger.warn("Test ser " + name + "(" + (value != null ? value.getClass().getName() : "") + ":" + (value != null && value.getClass().getClassLoader() != null ? value.getClass().getClassLoader().getClass().getName() : "") + ")" + " value: " + value);
+         if (value == null) return true;
+-        try {
+-            ObjectOutputStream out = new ObjectOutputStream(new ByteArrayOutputStream());
++        try (ObjectOutputStream out = new ObjectOutputStream(new ByteArrayOutputStream());) {
+             out.writeObject(value);
+-            out.close();
+             return true;
+         } catch (IOException e) {
+             logger.warn("Tried to set session attribute [" + name + "] with non-serializable value of type " + value.getClass().getName(), e);
+diff --git framework/src/start/java/MoquiStart.java framework/src/start/java/MoquiStart.java
+index 73010a32..64b6b7db 100644
+--- framework/src/start/java/MoquiStart.java
++++ framework/src/start/java/MoquiStart.java
+@@ -434,7 +434,7 @@ public class MoquiStart {
+         if (useProperties) {
+             moquiInitProperties = new Properties();
+             URL initProps = cl.getResource("MoquiInit.properties");
+-            if (initProps != null) { InputStream is = initProps.openStream(); moquiInitProperties.load(is); is.close(); }
++            if (initProps != null) { try (InputStream is = initProps.openStream()) { moquiInitProperties.load(is);} }
+         }
+ 
+         // before doing anything else make sure the moqui.runtime system property exists (needed for config of various things)
+@@ -692,32 +692,26 @@ public class MoquiStart {
+             if (tempDir.mkdir()) tempDir.deleteOnExit();
+             File file = File.createTempFile("moqui_temp", tempName, tempDir);
+             file.deleteOnExit();
+-            BufferedOutputStream os = null;
+-            try {
+-                os = new BufferedOutputStream(new FileOutputStream(file));
++            try (BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(file));) {
+                 os.write(jeBytes);
+-            } finally {
+-                if (os != null) os.close();
+             }
+             return file;
+         }
+ 
+         @SuppressWarnings("ThrowFromFinallyBlock")
+         private byte[] getJarEntryBytes(JarFile jarFile, JarEntry je) throws IOException {
+-            DataInputStream dis = null;
++
+             byte[] jeBytes = null;
+-            try {
+                 long lSize = je.getSize();
+                 if (lSize <= 0  ||  lSize >= Integer.MAX_VALUE) {
+                     throw new IllegalArgumentException("Size [" + lSize + "] not valid for war entry [" + je + "]");
+                 }
+                 jeBytes = new byte[(int)lSize];
+-                InputStream is = jarFile.getInputStream(je);
+-                dis = new DataInputStream(is);
++                try (InputStream is = jarFile.getInputStream(je);
++                     DataInputStream dis = new DataInputStream(is)) {
+                 dis.readFully(jeBytes);
+-            } finally {
+-                if (dis != null) dis.close();
+-            }
++                }
++
+             return jeBytes;
+         }
+ 
+diff --git framework/template/XmlActions.groovy.ftl framework/template/XmlActions.groovy.ftl
+index 39236c12..6cc80f66 100644
+--- framework/template/XmlActions.groovy.ftl
++++ framework/template/XmlActions.groovy.ftl
+@@ -276,21 +276,25 @@ ${.node}
+     </#if>
+     if (true) {
+         int ${.node["@entry"]}_index = 0
++        if (${.node["@list"]} instanceof org.moqui.entity.EntityListIterator) {
++            try (_${.node["@entry"]}Iterator = ${.node["@list"]}.iterator()) {
++                ${.node["@entry"]}_index = 0
++                while ((${.node["@entry"]} = _${.node["@entry"]}Iterator.next()) != null) {
++                    <#recurse/>
++                    ${.node["@entry"]}_index++
++                }
++            }
++        } else {
+         Iterator _${.node["@entry"]}Iterator = ${.node["@list"]}.iterator()
+-        // behave differently for EntityListIterator, avoid using hasNext()
+-        boolean ${.node["@entry"]}IsEli = (_${.node["@entry"]}Iterator instanceof org.moqui.entity.EntityListIterator)
+-        while (${.node["@entry"]}IsEli || _${.node["@entry"]}Iterator.hasNext()) {
++        while (_${.node["@entry"]}Iterator.hasNext()) {
+             ${.node["@entry"]} = _${.node["@entry"]}Iterator.next()
+-            if (${.node["@entry"]}IsEli && ${.node["@entry"]} == null) break
+-            if (!${.node["@entry"]}IsEli) ${.node["@entry"]}_has_next = _${.node["@entry"]}Iterator.hasNext()
+-
+             // begin iterator internal block
+             <#recurse/>
+             // end iterator internal block for list ${.node["@list"]}
+ 
+             ${.node["@entry"]}_index++
+         }
+-        if(${.node["@entry"]}IsEli) _${.node["@entry"]}Iterator.close()
++        }
+     }
+ </#macro>
+ <#macro message>
