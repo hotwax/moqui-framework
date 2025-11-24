@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
 import javax.servlet.http.HttpSession
 import javax.websocket.*
 import javax.websocket.server.HandshakeRequest
+import java.nio.channels.ClosedChannelException
 
 /**
  * An abstract class for WebSocket Endpoint that does basic setup, including creating an ExecutionContext with the user
@@ -108,6 +109,8 @@ abstract class MoquiAbstractEndpoint extends Endpoint implements MessageHandler.
     void onError(Session session, Throwable thr) {
         if (thr instanceof SocketTimeoutException || (thr.getMessage() != null && thr.getMessage().toLowerCase().contains("timeout"))) {
             logger.info("Timeout in WebSocket Session ${session.getId()}, User ${userId} (${username}): ${thr.getMessage()}")
+        } else if (thr instanceof ClosedChannelException) {
+            logger.info("WebSocket channel closed unexpectedly. ${session.getId()}, User ${userId} (${username}): ${thr.getMessage()}")
         } else {
             logger.warn("Error in WebSocket Session ${session.getId()}, User ${userId} (${username})", thr)
         }
