@@ -635,9 +635,8 @@ class ScreenRenderImpl implements ScreenRender {
                         response.setHeader("Cache-Control", "max-age=86400, must-revalidate, public")
                     }
 
-                    InputStream is
-                    try {
-                        is = fileResourceRef.openStream()
+
+                    try (InputStream is = fileResourceRef.openStream()) {
                         OutputStream os = response.outputStream
                         int totalLen = ObjectUtilities.copyStream(is, os)
 
@@ -647,8 +646,6 @@ class ScreenRenderImpl implements ScreenRender {
                                     resourceStartTime, (System.nanoTime() - startTimeNanos)/1000000.0D, (long) totalLen)
                         }
                         if (isTraceEnabled) logger.trace("Sent binary response of length ${totalLen} from file ${fileResourceRef.location} for request to ${screenUrlInstance.url}")
-                    } finally {
-                        if (is != null) is.close()
                     }
                 } else {
                     throw new BaseArtifactException("Tried to get binary content at ${screenUrlInfo.fileResourcePathList} under screen ${screenUrlInfo.targetScreen.location}, but there is no HTTP response available")
@@ -2218,7 +2215,7 @@ class ScreenRenderImpl implements ScreenRender {
         // if no user theme see if group a user is in has a theme
         if (themeId == null || themeId.length() == 0) {
             // use reverse alpha so ALL_USERS goes last...
-            List<String> userGroupIdSet = new ArrayList(new TreeSet(ec.user.getUserGroupIdSet())).reverse(true)
+            List<String> userGroupIdSet = new ArrayList<String>(new TreeSet<String>(ec.user.getUserGroupIdSet())).reverse(true)
             EntityList groupThemeList = entityFacade.find("moqui.security.UserGroupScreenTheme")
                     .condition("userGroupId", "in", userGroupIdSet).condition("screenThemeTypeEnumId", stteId)
                     .orderBy("sequenceNum,-userGroupId").useCache(true).disableAuthz().list()
