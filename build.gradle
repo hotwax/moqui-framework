@@ -1176,6 +1176,7 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
     String branch = component.'@branch'
 
     String repositoryName = (component.'@repository' ?: myaddons?.'@default-repository' ?: addons.'@default-repository' ?: 'github')
+    Boolean privateRepo = 'Y'.equalsIgnoreCase(component.'@private');
     Node repository = myaddons != null ? (Node) myaddons.repository.find({ it."@name" == repositoryName }) : null
     if (repository == null) repository = (Node) addons.repository.find({ it."@name" == repositoryName })
     if (repository == null) throw new InvalidUserDataException("Repository ${repositoryName} not found in myaddons.xml or addons.xml")
@@ -1183,11 +1184,33 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
     if (location == null) throw new InvalidUserDataException("Location for type ${type} now found in repository ${repositoryName}")
 
     String url = Eval.me('component', component, '"""' + location.'@url' + '"""')
+    if (!privateRepo) {
     logger.lifecycle("Getting ${compName} (type ${type}) from ${url} at ${branch} to ${targetDirPath}")
+    }
 
     File targetDir = file(targetDirPath)
     if (targetDir.exists()) { logger.lifecycle("Component ${compName} already exists at ${targetDir}"); return targetDir }
     if (type in ['current', 'release', 'binary']) {
+        if (privateRepo) {
+            def compVersion = component.'@version'
+            // Regex: 3 or 4 dot-separated numeric parts (e.g. 1.0.0 or 1.2.3.4)
+            def versionPattern = ~/^\d+(\.\d+){2,3}$/
+
+            if (compVersion ==~ versionPattern) {
+                compVersion = "v$compVersion"
+            }
+            /*FIXME: Need to update the getComponent code to handle the */
+            location = (Node) repository.location.find({ it."@type" == 'git' })
+            url = Eval.me('component', component, '"""' + location.'@url' + '"""')
+
+            logger.lifecycle("Getting ${compName} (type ${type}) from ${url} at ${branch} to ${targetDirPath}")
+            /* ant.get does not support the file download from private repository, added git command to clone the repo,
+            it will use the saved user credentials, as per current deployment process .netrc file created for the git credentials, the command line git use the credentials from the same and do the clone,
+             Once we move to deploy keys based deploy we need to update the command as needed*/
+            exec {
+                commandLine 'sh', '-c', "git clone --depth 1 -b ${compVersion} ${url} ${targetDir}"
+            }
+        } else {
         File zipFile = file("${targetDirPath}.zip")
         ant.get(src: url, dest: zipFile)
         // the eachFile closure removes the first path from each file, moving everything up a directory
@@ -1198,8 +1221,15 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
         if (type == 'current') { archiveDirName += component.'@branch' } else { archiveDirName += component.'@version' }
         // logger.lifecycle("Deleting dir ${targetDirPath}/${archiveDirName}")
         delete file("${targetDirPath}/${archiveDirName}")
+        }
     } else if (type == 'git') {
-        Grgit.clone(dir: targetDir, uri: url, refToCheckout: branch)
+        if (privateRepo) {
+        exec {
+            commandLine 'sh', '-c', "git clone --depth 1 --branch ${branch} ${url} ${targetDir}"
+        }
+        } else {
+            Grgit.clone(dir: targetDir, uri: url, refToCheckout: branch)
+        }
     }
     logger.lifecycle("Downloaded ${compName} to ${targetDirPath}")
     return targetDir
