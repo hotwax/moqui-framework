@@ -75,7 +75,7 @@ maintainability:
 
 ------------------------------------------------------------------------
 
-## Commit References
+#### Commit References
 
 (Add your commit hashes here.)
 - Add support for CSV escape character to EntityDataLoaderImpl [#19](https://github.com/hotwax/moqui-framework/pull/19/files)
@@ -90,7 +90,7 @@ maintainability:
 
 ------------------------------------------------------------------------
 
-## Upstream / OOTB Reference
+#### Upstream / OOTB Reference
 
 (Add the upstream PR link here.)
 - Implemented withCloseable/try-with-resources where needed in the code… [#625](https://github.com/moqui/moqui-framework/pull/625/files)
@@ -98,3 +98,15 @@ maintainability:
 
 ------------------------------------------------------------------------
 
+### [MyAddons.patch](https://github.com/hotwax/moqui-framework/patches/MyAddons.patch)
+Added support for downloading components from private Git repositories:
+- Introduced a new private="Y" attribute for components.
+- When a component is marked as private:
+  - The system now bypasses ant.get (which doesn’t support private repos).
+  - Automatically switches to cloning using the system’s configured Git credentials (e.g., .netrc).
+  - Handles version normalization (1.0.0 → v1.0.0).
+  - Ensures consistent behavior for both release/current and git component types.
+  - Public repositories continue using the existing ant.get and Grgit.clone flow.
+
+### Benefit
+Enables seamless retrieval of private components during build/deployment without changing the existing addon structure.
