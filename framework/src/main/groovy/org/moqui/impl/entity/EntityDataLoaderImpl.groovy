@@ -75,6 +75,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
     char csvDelimiter = ','
     char csvCommentStart = '#'
     char csvQuoteChar = '"'
+    char csvEscapeChar = '\\'
 
     String csvEntityName = null
     List<String> csvFieldNames = null
@@ -115,6 +116,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
     @Override EntityDataLoader csvDelimiter(char delimiter) { this.csvDelimiter = delimiter; return this }
     @Override EntityDataLoader csvCommentStart(char commentStart) { this.csvCommentStart = commentStart; return this }
     @Override EntityDataLoader csvQuoteChar(char quoteChar) { this.csvQuoteChar = quoteChar; return this }
+    @Override EntityDataLoader csvEscapeChar(char escapeChar) { this.csvEscapeChar = escapeChar; return this }
 
     @Override EntityDataLoader csvEntityName(String entityName) {
         if (!efi.isEntityDefined(entityName) && !sfi.isServiceDefined(entityName))
@@ -293,21 +295,15 @@ class EntityDataLoaderImpl implements EntityDataLoader {
 
             // load the CSV text in its own transaction
             if (this.csvText) {
-                InputStream csvInputStream = new ByteArrayInputStream(csvText.getBytes("UTF-8"))
-                try {
+                try (InputStream csvInputStream = new ByteArrayInputStream(csvText.getBytes("UTF-8"))) {
                     tf.runUseOrBegin(transactionTimeout, "Error loading CSV entity data", { ech.loadFile("csvText", csvInputStream) })
-                } finally {
-                    if (csvInputStream != null) csvInputStream.close()
                 }
             }
 
             // load the JSON text in its own transaction
             if (this.jsonText) {
-                InputStream jsonInputStream = new ByteArrayInputStream(jsonText.getBytes("UTF-8"))
-                try {
+                try (InputStream jsonInputStream = new ByteArrayInputStream(jsonText.getBytes("UTF-8"))) {
                     tf.runUseOrBegin(transactionTimeout, "Error loading JSON entity data", { ejh.loadFile("jsonText", jsonInputStream) })
-                } finally {
-                    if (jsonInputStream != null) jsonInputStream.close()
                 }
             }
 
@@ -316,6 +312,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                 try {
                     loadSingleFile(location, exh, ech, ejh)
                 } catch (Throwable t) {
+                    eci.message.addMessage("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
                     logger.error("Skipping to next file after error: ${t.toString()} ${t.getCause() != null ? t.getCause().toString() : ''}")
                 }
             }
@@ -334,12 +331,11 @@ class EntityDataLoaderImpl implements EntityDataLoader {
         TransactionFacade tf = efi.ecfi.transactionFacade
         boolean beganTransaction = tf.begin(transactionTimeout)
         try {
-            InputStream inputStream = null
-            try {
+
+            try (InputStream inputStream = efi.ecfi.resourceFacade.getLocationStream(location)) {
                 logger.info("Loading entity data from ${location}")
                 long beforeTime = System.currentTimeMillis()
 
-                inputStream = efi.ecfi.resourceFacade.getLocationStream(location)
                 if (inputStream == null) throw new BaseException("Data file not found at ${location}")
 
                 long recordsLoaded = 0
@@ -419,8 +415,6 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                 }
             } catch (TypeToSkipException e) {
                 // nothing to do, this just stops the parsing when we know the file is not in the types we want
-            } finally {
-                if (inputStream != null) inputStream.close()
             }
         } catch (Throwable t) {
             tf.rollback(beganTransaction, "Error loading entity data", t)
@@ -925,6 +919,7 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                     .withSkipHeaderRecord(true) // TODO: remove this? does it even do anything?
                     .withIgnoreEmptyLines(true)
                     .withIgnoreSurroundingSpaces(true)
+                    .withEscape(edli.csvEscapeChar)
                     .parse(reader)
 
             Iterator<CSVRecord> iterator = parser.iterator()

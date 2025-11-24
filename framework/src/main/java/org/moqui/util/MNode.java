@@ -55,19 +55,25 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
         MNode cached = parsedNodeCache.get(location);
         if (cached != null && cached.lastModified >= rr.getLastModified()) return cached;
 
-        MNode node = parse(location, rr.openStream());
+        //MNode node = parse(location, rr.openStream());
+        try (InputStream is = rr.openStream()) {
+        MNode node = parse(location, is);
         node.lastModified = rr.getLastModified();
         if (node.lastModified > 0) parsedNodeCache.put(location, node);
         return node;
+        } catch (IOException e) {
+            throw new BaseException(e);
+        }
     }
     /** Parse from an InputStream and close the stream */
     public static MNode parse(String location, InputStream is) throws BaseException {
         if (is == null) return null;
-        try {
-            return parse(location, new InputSource(new InputStreamReader(is, UTF_8)));
-        } finally {
-            try { is.close(); }
-            catch (IOException e) { logger.error("Error closing XML stream from " + location, e); }
+
+        try (InputStreamReader reader = new InputStreamReader(is, UTF_8)) {
+            return parse(location, new InputSource(reader));
+        } catch (IOException e) {
+            logger.error("Error closing XML stream from " + location, e);
+            throw new BaseException("Error parsing XML stream from " + location, e);
         }
     }
     public static MNode parse(File fl) throws BaseException {
@@ -77,18 +83,14 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
         MNode cached = parsedNodeCache.get(location);
         if (cached != null && cached.lastModified >= fl.lastModified()) return cached;
 
-        BufferedReader fr = null;
-        try {
-            fr = Files.newBufferedReader(fl.toPath(), UTF_8); // new FileReader(fl);
+
+        try (BufferedReader fr = Files.newBufferedReader(fl.toPath(), UTF_8);) {
             MNode node = parse(fl.getPath(), new InputSource(fr));
             node.lastModified = fl.lastModified();
             if (node.lastModified > 0) parsedNodeCache.put(location, node);
             return node;
         } catch (Exception e) {
             throw new BaseException("Error parsing XML file at " + fl.getPath(), e);
-        } finally {
-            try { if (fr != null) fr.close(); }
-            catch (IOException e) { logger.error("Error closing XML file at " + fl.getPath(), e); }
         }
     }
     public static MNode parseText(String location, String text) throws BaseException {
@@ -109,16 +111,13 @@ public class MNode implements TemplateNodeModel, TemplateSequenceModel, Template
     }
 
     public static MNode parseRootOnly(ResourceReference rr) {
-        InputStream is = rr.openStream();
-        if (is == null) return null;
-        try {
+        try (InputStream is = rr.openStream();) {
+            if (is == null) return null;
             return parseRootOnly(rr.getLocation(), new InputSource(is));
-        } finally {
-            if (is != null) {
-                try { is.close(); }
-                catch (IOException e) { logger.error("Error closing XML stream from " + rr.getLocation(), e); }
-            }
+        } catch (IOException e) {
+            logger.error("Error closing XML stream from " + rr.getLocation(), e);
         }
+        return null;
     }
     public static MNode parseRootOnly(String location, InputSource isrc) {
         try {
