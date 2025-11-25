@@ -24,7 +24,7 @@ apply plugin: 'com.github.ben-manes.versions'
 buildscript {
     repositories {
         mavenCentral()
-        maven { url = "https://plugins.gradle.org/m2/" }
+        maven { url = 'https://plugins.gradle.org/m2/' }
     }
     dependencies {
         classpath 'com.github.ben-manes:gradle-versions-plugin:0.52.0'
@@ -76,8 +76,13 @@ dependencies {
     api 'org.apache.groovy:groovy-templates:5.0.3' // Apache 2.0
     api 'org.apache.groovy:groovy-xml:5.0.3' // Apache 2.0
 
+    // ========== Local (flatDir) libraries in framework/lib ==========
+
     // Bitronix Transaction Manager, a modernized fork
-    api 'org.moqui:btm:4.0.1' // Apache 2.0
+    api 'com.github.moqui.bitronix:btm:4.0.0-BETA1' // Apache 2.0
+    runtimeOnly 'org.javassist:javassist:3.29.2-GA' // Apache 2.0
+
+    // ========== General Libraries from Maven Central ==========
 
     // Apache Commons
     api 'org.apache.commons:commons-csv:1.14.0' // Apache 2.0
