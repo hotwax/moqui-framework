@@ -247,7 +247,7 @@ void stopSearch(String moquiRuntime) {
     if (pidFile.exists() && binFile.exists()) {
         String pid = pidFile.getText()
         logger.lifecycle("Stopping ${osDir.exists() ? 'OpenSearch' : 'ElasticSearch'} installed in ${workDir} with pid ${pid}")
-        ["kill", pid].execute(null, file(workDir))
+        ["kill", pid].execute(null, file(workDir)).waitFor()
         if (pidFile.exists()) delete pidFile
     } else {
         if (!pidFile.exists()) logger.lifecycle("Not Stopping ${osDir.exists() ? 'OpenSearch' : 'ElasticSearch'} installed in ${workDir}, no pid file found")
