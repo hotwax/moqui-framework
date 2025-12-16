@@ -967,7 +967,9 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     SecurityManager getSecurityManager() {
         if (internalSecurityManager != null) { return internalSecurityManager }
         MoquiShiroRealm moquiRealm = new MoquiShiroRealm(this)
-        internalSecurityManager = new DefaultWebSecurityManager(moquiRealm)
+        DefaultWebSecurityManager sm = new DefaultWebSecurityManager(moquiRealm)
+        sm.setRememberMeManager(null)
+        internalSecurityManager = sm
         // NOTE: setting this statically just in case something uses it, but for Moqui we'll be getting the SecurityManager from the ecfi
         SecurityUtils.setSecurityManager(internalSecurityManager)
         return internalSecurityManager
