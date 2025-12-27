@@ -224,25 +224,25 @@ public class MoquiStart {
             Class<?> customizerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConfiguration$Customizer");
 
             Class<?> sessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionIdManager");
-            Class<?> sessionManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionManager");
-            Class<?> sessionHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.servlet.SessionHandler");
             Class<?> defaultSessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionIdManager");
+            Class<?> sessionHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.servlet.SessionHandler");
+            Class<?> sessionManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionManager");
             Class<?> sessionCacheClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionCache");
-            Class<?> sessionCacheFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionCacheFactory");
+            Class<?> defaultSessionCacheClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionCache");
             Class<?> sessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionDataStore");
             Class<?> fileSessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.FileSessionDataStore");
 
             Class<?> connectorClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.Connector");
             Class<?> serverConnectorClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.ServerConnector");
-            Class<?> webappClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.webapp.WebAppContext");
+            Class<?> webappClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.webapp.WebAppContext");
 
             Class<?> connectionFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.ConnectionFactory");
             Class<?> connectionFactoryArrayClass = Array.newInstance(connectionFactoryClass, 1).getClass();
             Class<?> httpConnectionFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConnectionFactory");
 
-            Class<?> scHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.servlet.ServletContextHandler");
-            Class<?> wsInitializerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer");
-            Class<?> wsInitializerConfiguratorClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer$Configurator");
+            Class<?> scHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.servlet.ServletContextHandler");
+            Class<?> wsInitializerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer");
+            Class<?> wsInitializerConfiguratorClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer$Configurator");
 
             Class<?> gzipHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.handler.gzip.GzipHandler");
 
@@ -272,8 +272,7 @@ public class MoquiStart {
             System.out.println("Creating Jetty FileSessionDataStore with directory " + storeDir.getCanonicalPath());
             Object sessionHandler = sessionHandlerClass.getConstructor().newInstance();
             sessionHandlerClass.getMethod("setServer", serverClass).invoke(sessionHandler, server);
-            Object sessionCacheFactory = sessionCacheFactoryClass.getConstructor().newInstance();
-            Object sessionCache = sessionCacheFactoryClass.getMethod("newSessionCache", sessionManagerClass).invoke(sessionCacheFactory, sessionHandler);
+            Object sessionCache = defaultSessionCacheClass.getConstructor(sessionManagerClass).newInstance(sessionHandler);
             Object sessionDataStore = fileSessionDataStoreClass.getConstructor().newInstance();
             fileSessionDataStoreClass.getMethod("setStoreDir", File.class).invoke(sessionDataStore, storeDir);
             fileSessionDataStoreClass.getMethod("setDeleteUnrestorableFiles", boolean.class).invoke(sessionDataStore, true);
@@ -282,7 +281,6 @@ public class MoquiStart {
             Object sidMgr = defaultSessionIdManagerClass.getConstructor(serverClass).newInstance(server);
             defaultSessionIdManagerClass.getMethod("setServer", serverClass).invoke(sidMgr, server);
             sessionHandlerClass.getMethod("setSessionIdManager", sessionIdManagerClass).invoke(sessionHandler, sidMgr);
-            serverClass.getMethod("addBean", Object.class).invoke(server, sidMgr);
 
             // WebApp
             Object webapp = webappClass.getConstructor().newInstance();
@@ -297,6 +295,8 @@ public class MoquiStart {
             } else {
                 webappClass.getMethod("setBaseResourceAsString", String.class).invoke(webapp, moquiStartLoader.wrapperUrl.toExternalForm());
             }
+
+            // NOTE DEJ20210520: now always using StartClassLoader because of breaking classloader changes in 9.4.37 (likely from https://github.com/eclipse/jetty.project/pull/5894)
             webappClass.getMethod("setClassLoader", ClassLoader.class).invoke(webapp, moquiStartLoader);
 
             // handle webapp_session_cookie_max_age with setInitParameter (1209600 seconds is about 2 weeks 60 * 60 * 24 * 14)
@@ -339,15 +339,13 @@ public class MoquiStart {
             serverClass.getMethod("start").invoke(server);
             serverClass.getMethod("join").invoke(server);
 
-            /*
-               Jetty 12 / Jakarta EE 11 notes:
-               - SessionIdManager is server-scoped and must be registered as a Server bean.
-               - SessionHandler discovers the SessionIdManager automatically.
-               - Handler hierarchy:
-                 Server
-                  └── GzipHandler
-                      └── WebAppContext
-                          └── SessionHandler
+            /* TODO update below, it changed when upgrading to Jetty 12.1 and
+               jakarta ee 10. Specifically, the chain hierarchy now is quite
+               different from jetty 9:
+               Server
+                └── GzipHandler
+                    └── WebAppContext
+                        └── SessionHandler
 
             The classpath dependent code we are running:
 
