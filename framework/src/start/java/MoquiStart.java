@@ -377,24 +377,21 @@ public class MoquiStart {
             WebAppContext webapp = new WebAppContext();
             webapp.setContextPath("/");
             webapp.setServer(server);
-            webapp.setSessionHandler(sessionHandler);
-            webapp.setMaxFormKeys(5000);
-            if (isInWar) {
-                webapp.setWar(moquiStartLoader.wrapperUrl.toExternalForm());
-                webapp.setTempDirectory(new File("execwartmp/ROOT"));
-            } else {
-                webapp.setBaseResourceAsString(moquiStartLoader.wrapperUrl.toExternalForm());
-            }
-            webapp.setClassLoader(moquiStartLoader);
-            String sessionMaxAge = System.getenv("webapp_session_cookie_max_age");
-            if (sessionMaxAge != null && !sessionMaxAge.isEmpty()) {
-                try {
-                    Integer maxAgeInt = Integer.parseInt(sessionMaxAge);
-                    webapp.setInitParameter("org.eclipse.jetty.servlet.MaxAge", maxAgeInt.toString());
-                } catch (Exception ignored) {}
-            }
-            ServerContainer wsContainer = JakartaWebSocketServletContainerInitializer.configure(webapp, null);
+            webapp.setWar(moquiStartLoader.wrapperWarUrl.toExternalForm());
+
+            // (Optional) Set the directory the war will extract to.
+            // If not set, java.io.tmpdir will be used, which can cause problems
+            // if the temp directory gets cleaned periodically.
+            // Removed by the code elsewhere that deletes on close
+            webapp.setTempDirectory(new File(tempDirName + "/ROOT"));
+            server.setHandler(webapp);
+
+            // WebSocket
+            // NOTE: ServletContextHandler.SESSIONS = 1 (int)
+            ServerContainer wsContainer = org.eclipse.jetty.websocket.jsr356.server.deploy.WebSocketServerContainerInitializer.configureContext(webapp);
             webapp.setAttribute("jakarta.websocket.server.ServerContainer", wsContainer);
+
+            // GzipHandler
             GzipHandler gzipHandler = new GzipHandler();
             gzipHandler.setHandler(webapp);
             server.setHandler(gzipHandler);
