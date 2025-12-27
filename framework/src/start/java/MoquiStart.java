@@ -21,7 +21,6 @@ import java.io.InputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
-import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,7 +31,6 @@ import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -738,7 +736,7 @@ public class MoquiStart {
                     try {
                         String jarFileName = jarFile.getName();
                         if (jarFileName.contains("\\")) jarFileName = jarFileName.replace('\\', '/');
-                        URL resourceUrl = URI.create("jar:file:" + jarFileName + "!/" + jarEntry).toURL();
+                        URL resourceUrl = new URL("jar:file:" + jarFileName + "!/" + jarEntry);
                         resourceCache.put(resourceName, resourceUrl);
                         return resourceUrl;
                     } catch (MalformedURLException e) {
@@ -765,7 +763,7 @@ public class MoquiStart {
                     try {
                         String jarFileName = jarFile.getName();
                         if (jarFileName.contains("\\")) jarFileName = jarFileName.replace('\\', '/');
-                        urlList.add(URI.create("jar:file:" + jarFileName + "!/" + jarEntry).toURL());
+                        urlList.add(new URL("jar:file:" + jarFileName + "!/" + jarEntry));
                     } catch (MalformedURLException e) {
                         System.out.println("Error making URL for [" + resourceName + "] in jar [" + jarFile + "] in war file [" + wrapperUrl + "]: " + e.toString());
                     }
@@ -864,7 +862,7 @@ public class MoquiStart {
             String seal = mf.getMainAttributes().getValue(Attributes.Name.SEALED);
             if (seal == null) return null;
             try {
-                return URI.create(seal).toURL();
+                return new URL(seal);
             } catch (MalformedURLException e) {
                 return null;
             }
