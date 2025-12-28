@@ -31,6 +31,7 @@ import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -227,13 +228,8 @@ public class MoquiStart {
             Class<?> customizerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConfiguration$Customizer");
 
             Class<?> sessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionIdManager");
-            Class<?> defaultSessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionIdManager");
             Class<?> sessionHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee10.servlet.SessionHandler");
-            Class<?> sessionManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionManager");
-            Class<?> sessionCacheClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionCache");
-            Class<?> defaultSessionCacheClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionCache");
-            Class<?> sessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionDataStore");
-            Class<?> nullSessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.NullSessionDataStore");
+            Class<?> defaultSessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionIdManager");
 
 
             Class<?> connectorClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.Connector");
@@ -273,10 +269,6 @@ public class MoquiStart {
             // SessionHandler (in-memory, non-persistent sessions)
             Object sessionHandler = sessionHandlerClass.getConstructor().newInstance();
             sessionHandlerClass.getMethod("setServer", serverClass).invoke(sessionHandler, server);
-            Object sessionCache = defaultSessionCacheClass.getConstructor(sessionManagerClass).newInstance(sessionHandler);
-            Object nullSessionDataStore = nullSessionDataStoreClass.getConstructor().newInstance();
-            sessionCacheClass.getMethod("setSessionDataStore", sessionDataStoreClass).invoke(sessionCache, nullSessionDataStore);
-            sessionHandlerClass.getMethod("setSessionCache", sessionCacheClass).invoke(sessionHandler, sessionCache);
             Object sidMgr = defaultSessionIdManagerClass.getConstructor(serverClass).newInstance(server);
             serverClass.getMethod("addBean", Object.class).invoke(server, sidMgr);
 
@@ -343,9 +335,12 @@ public class MoquiStart {
             serverClass.getMethod("start").invoke(server);
             serverClass.getMethod("join").invoke(server);
 
-            /* TODO update below, it changed when upgrading to Jetty 12.1 and
-               jakarta ee 10. Specifically, the chain hierarchy now is quite
-               different from jetty 9:
+            /*
+               Jetty 12 / Jakarta EE 10 notes:
+               - SessionIdManager is server-scoped and must be registered as a Server bean.
+               - SessionHandler discovers the SessionIdManager automatically.
+               - Manual setSessionIdManager(...) is legacy (Jetty <= 11).
+               Handler hierarchy:
                Server
                 └── GzipHandler
                     └── WebAppContext
