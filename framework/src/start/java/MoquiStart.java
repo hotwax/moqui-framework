@@ -277,6 +277,8 @@ public class MoquiStart {
 
             webappClass.getMethod("setContextPath", String.class).invoke(webapp, "/");
             webappClass.getMethod("setServer", serverClass).invoke(webapp, server);
+            // SessionIdManager automatically discovered from server.
+            // SessionHandler must be set on WebAppContext to enable servlet sessions
             webappClass.getMethod("setSessionHandler", sessionHandlerClass).invoke(webapp, sessionHandler);
             webappClass.getMethod("setMaxFormKeys", int.class).invoke(webapp, 5000);
             webappClass.getMethod("setConfigurationDiscovered", boolean.class).invoke(webapp, false);
@@ -355,40 +357,36 @@ public class MoquiStart {
             ServerConnector httpConnector = new ServerConnector(server, httpConnectionFactory);
             httpConnector.setPort(port);
             server.addConnector(httpConnector);
-
-            // SessionDataStore
-            SessionIdManager sidMgr = new DefaultSessionIdManager(server);
-            sidMgr.setServer(server);
             SessionHandler sessionHandler = new SessionHandler();
             sessionHandler.setServer(server);
-            DefaultSessionCacheFactory sessionCacheFactory = new DefaultSessionCacheFactory();
-            SessionCache sessionCache = sessionCacheFactory.newSessionCache(sessionHandler);
-            FileSessionDataStore sessionDataStore = new FileSessionDataStore();
-            sessionDataStore.setStoreDir(storeDir);
-            sessionDataStore.setDeleteUnrestorableFiles(true);
-            sessionCache.setSessionDataStore(sessionDataStore);
-            sessionHandler.setSessionCache(sessionCache);
             SessionIdManager sessionIdManager = new DefaultSessionIdManager(server);
             server.addBean(sessionIdManager);
-            sessionHandler.setSessionIdManager(sessionIdManager);
             WebAppContext webapp = new WebAppContext();
             webapp.setContextPath("/");
             webapp.setServer(server);
-            webapp.setWar(moquiStartLoader.wrapperWarUrl.toExternalForm());
-
-            // (Optional) Set the directory the war will extract to.
-            // If not set, java.io.tmpdir will be used, which can cause problems
-            // if the temp directory gets cleaned periodically.
-            // Removed by the code elsewhere that deletes on close
-            webapp.setTempDirectory(new File(tempDirName + "/ROOT"));
-            server.setHandler(webapp);
-
-            // WebSocket
-            // NOTE: ServletContextHandler.SESSIONS = 1 (int)
-            ServerContainer wsContainer = org.eclipse.jetty.websocket.jsr356.server.deploy.WebSocketServerContainerInitializer.configureContext(webapp);
+            webapp.setSessionHandler(sessionHandler);
+            webapp.setMaxFormKeys(5000);
+            webapp.setConfigurationDiscovered(false);
+            webapp.setParentLoaderPriority(false);
+            ResourceFactory resourceFactory = ResourceFactory.root();
+            String base = moquiStartLoader.wrapperUrl.toExternalForm();
+            if (base.endsWith(".war")) {
+                base = "jar:" + base + "!/";
+            }
+            Resource baseResource = resourceFactory.newResource(base);
+            webapp.setAttribute("org.eclipse.jetty.server.webapp.WebInfIncludeJarPattern", "^$");
+            webapp.setAttribute("org.eclipse.jetty.server.webapp.ContainerIncludeJarPattern", "^$");
+            webapp.setBaseResource(baseResource);
+            webapp.setClassLoader(moquiStartLoader);
+            String sessionMaxAge = System.getenv("webapp_session_cookie_max_age");
+            if (sessionMaxAge != null && !sessionMaxAge.isEmpty()) {
+                try {
+                    Integer maxAgeInt = Integer.parseInt(sessionMaxAge);
+                    webapp.setInitParameter("org.eclipse.jetty.servlet.MaxAge", maxAgeInt.toString());
+                } catch (Exception ignored) {}
+            }
+            ServerContainer wsContainer = JakartaWebSocketServletContainerInitializer.configure(webapp, null);
             webapp.setAttribute("jakarta.websocket.server.ServerContainer", wsContainer);
-
-            // GzipHandler
             GzipHandler gzipHandler = new GzipHandler();
             gzipHandler.setHandler(webapp);
             server.setHandler(gzipHandler);
@@ -397,9 +395,6 @@ public class MoquiStart {
             server.setStopAtShutdown(true);
             server.setStopTimeout(30000L);
             server.start();
-            // The use of server.join() the will make the current thread join and
-            // wait until the server is done executing.
-            // See http://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html#join()
             server.join();
             */
         } catch (Exception e) {
