@@ -398,20 +398,14 @@ public class MClassLoader extends ClassLoader {
 
         Class<?> c = null;
         try {
-            // classes handled opposite of resources, try parent chain first (avoid java.lang.LinkageError)
+            // classes handled opposite of resources, try parent chain first (Jetty WebAppClassLoader may filter)
             ClassLoader cl = getParent();
-            int depth = 0;
-            /* When in jetty embedded mode (MoquiStart) first try
-             * org.eclipse.jetty.ee.webapp.WebAppClassLoader
-             * then MoquiStart.StartClassLoader. If in a servlet container, then
-             * use the classloader parents provided by that container. */
-            while (cl != null && depth < 2) {
+            while (cl != null) {
                 try {
                     c = cl.loadClass(className);
                     break;
                 } catch (ClassNotFoundException|NoClassDefFoundError e) {
                     cl = cl.getParent();
-                    depth++;
                 } catch (RuntimeException e) {
                     e.printStackTrace();
                     throw e;
