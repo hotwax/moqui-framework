@@ -334,7 +334,7 @@ public class RestClient {
         try {
             Request request = makeRequest(tempFactory != null ? tempFactory : (overrideRequestFactory != null ? overrideRequestFactory : getDefaultRequestFactory()));
             if (timeoutSeconds < 2) timeoutSeconds = 2;
-            request.idleTimeout(timeoutSeconds-1, TimeUnit.SECONDS);
+            request.idleTimeout(timeoutSeconds - 1, TimeUnit.SECONDS);
             // use a FutureResponseListener so we can set the timeout and max response size (old: response = request.send(); )
             CompletableResponseListener listener = new CompletableResponseListener(request, maxResponseSize);
             try {
