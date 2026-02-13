@@ -21,6 +21,7 @@ import com.cronutils.model.definition.CronDefinitionBuilder
 import com.cronutils.model.time.ExecutionTime
 import com.cronutils.parser.CronParser
 import groovy.transform.CompileStatic
+import org.moqui.context.ArtifactExecutionInfo
 import org.moqui.entity.EntityCondition
 import org.moqui.entity.EntityList
 import org.moqui.entity.EntityValue
@@ -158,9 +159,46 @@ class ScheduledJobRunner implements Runnable {
                         if (expireLockTime == null) expireLockTime = 1440L
                         ZonedDateTime lockCheckTime = now.minusMinutes(expireLockTime.intValue())
                         if (lastRunDt.isBefore(lockCheckTime)) {
-                            // recover failed job without lock reset, run it if schedule says to
-                            logger.warn("Lock expired: found lock for job ${jobName} from ${lastRunDt}, more than ${expireLockTime} minutes old, ignoring lock")
-                            serviceJobRunLock.set("jobRunId", null).update()
+                            String lockedJobRunId = (String) serviceJobRunLock.getNoCheckSimple("jobRunId")
+                            EntityValue lockedJobRun = efi.find("moqui.service.job.ServiceJobRun")
+                                    .condition("jobRunId", lockedJobRunId).useCache(false).one()
+                            String lockedRunThread = (String) lockedJobRun?.getNoCheckSimple("runThread")
+                            String jobServiceName = (String) serviceJob.getNoCheckSimple("serviceName")
+
+                            boolean lockedRunStillExecuting = false
+                            if (lockedRunThread != null && !lockedRunThread.isEmpty() &&
+                                    jobServiceName != null && !jobServiceName.isEmpty()) {
+                                try {
+                                    synchronized (ecfi.activeContextMap) {
+                                        for (ExecutionContextImpl activeCtx in ecfi.activeContextMap.values()) {
+                                            if (activeCtx == null || !lockedRunThread.equals(activeCtx.forThreadName)) continue
+                                            List<ArtifactExecutionInfo> artifactStack = activeCtx.getArtifactExecution().getStackArray()
+                                            if (artifactStack == null || artifactStack.isEmpty()) continue
+                                            for (ArtifactExecutionInfo artifactInfo in artifactStack) {
+                                                if (artifactInfo != null && artifactInfo.getTypeEnum() == ArtifactExecutionInfo.AT_SERVICE &&
+                                                        jobServiceName.equals(artifactInfo.getName())) {
+                                                    lockedRunStillExecuting = true
+                                                    break
+                                                }
+                                            }
+                                            if (lockedRunStillExecuting) break
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    // Don't release lock if runtime check fails
+                                    lockedRunStillExecuting = true
+                                    logger.warn("Unable to verify active run for job ${jobName} run ${lockedJobRunId}; keeping lock", t)
+                                }
+                            }
+
+                            if (lockedRunStillExecuting) {
+                                logger.warn("Lock expired for job ${jobName} from ${lastRunDt}, but locked run ${lockedJobRunId} appears active; keeping lock")
+                                continue
+                            } else {
+                                // recover failed job without lock reset, run it if schedule says to
+                                logger.warn("Lock expired: found lock for job ${jobName} from ${lastRunDt}, run ${lockedJobRunId} not active, ignoring lock")
+                                serviceJobRunLock.set("jobRunId", null).update()
+                            }
                         } else {
                             // normal lock, skip this job
                             logger.info("Lock found for job ${jobName} from ${lastRunDt} run ID ${serviceJobRunLock.jobRunId}, not running")
