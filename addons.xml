@@ -113,7 +113,7 @@
 
     <component-set name="demo" components="moqui-poi,moqui-demo,example,HiveMind,PopCommerce,PopRestStore,MarbleERP"/>
     <component-set name="popc" components="PopCommerce,PopRestStore"/>
-    <component-set name="all-moqui" components="example,start,moqui-aws,moqui-camel,moqui-cups,moqui-fop,moqui-hazelcast,moqui-image,moqui-kie,moqui-orientdb,moqui-poi,moqui-sftp,moqui-sso,moqui-wikitext,mantle-udm,mantle-usl,AuthorizeDotNet,mantle-edi,mantle-paytrace,mantle-shippo,mantle-yotpo,mantle-braintree,mantle-rsis,mantle-oagis,mantle-ubpl,SimpleScreens,HiveMind,PopCommerce,MarbleERP,PopRestStore,WeCreate,moqui-mjml,moqui-org,moqui-demo"/>
+    <component-set name="all-working" components="example,start,moqui-aws,moqui-camel,moqui-cups,moqui-fop,moqui-hazelcast,moqui-image,moqui-kie,moqui-orientdb,moqui-poi,moqui-sftp,moqui-sso,moqui-wikitext,mantle-udm,mantle-usl,AuthorizeDotNet,mantle-edi,mantle-paytrace,mantle-shippo,mantle-yotpo,mantle-braintree,mantle-rsis,mantle-oagis,mantle-ubpl,SimpleScreens,HiveMind,PopCommerce,MarbleERP,PopRestStore,WeCreate,moqui-org,moqui-demo,moqui-de_DE-addon,moqui-zh_CN-addon,Sales,WorkManagement,coarchy,stripe"/>
 
     <!-- Release builds:
         gradle getComponentSet -PcomponentSet=demo -PlocationType=release
