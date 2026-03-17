@@ -118,3 +118,14 @@ Added improvements to prevent scheduled jobs from getting stuck.
 **Job Runner**: Updates job status and locks in a new transaction. This ensures jobs are correctly marked as "Failed" instead of sticking in "Running" when database errors occur.
 
 **Benefit**: Improves stability by ensuring jobs don't get stuck after a crash.
+
+-------------------------------------------------------------------------
+
+### [JobRunId.patch](./JobRunId.patch)
+Added `_jobRunId` to service parameters when a service is called from a job.
+
+When a service job runs, it now puts `_jobRunId` into the service context before calling the actual service. This allows any service running in a job context to access the job run id.
+
+**Use cases:**
+- Services that create records (like `DataManagerLog`) can now read `_jobRunId` from context and save it. This lets you trace exactly which job run created a specific record
+- If something fails inside the service, `_jobRunId` can be included in error messages so you can directly look up the `ServiceJobRun` record for that run.

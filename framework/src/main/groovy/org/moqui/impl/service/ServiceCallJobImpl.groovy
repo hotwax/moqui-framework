@@ -237,6 +237,7 @@ class ServiceCallJobImpl extends ServiceCallImpl implements ServiceCallJob {
                         .disableAuthz().call()
 
                 if (lastRunTime != (Object) null) parameters.put("lastRunTime", lastRunTime)
+                if (jobRunId) parameters.put("_jobRunId", jobRunId)
 
                 // NOTE: authz is disabled because authz is checked before queueing
                 Map<String, Object> results = new HashMap<>()
