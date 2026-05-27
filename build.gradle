@@ -1225,7 +1225,7 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
     } else if (type == 'git') {
         if (privateRepo) {
         exec {
-            commandLine 'sh', '-c', "git clone --depth 1 --branch ${branch} ${url} ${targetDir}"
+            commandLine 'sh', '-c', "git clone --branch ${branch} ${url} ${targetDir}"
         }
         } else {
             Grgit.clone(dir: targetDir, uri: url, refToCheckout: branch)
