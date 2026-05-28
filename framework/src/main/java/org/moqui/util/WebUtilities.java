@@ -503,7 +503,7 @@ public class WebUtilities {
         @Override public void removeAttribute(String name) { scxt.removeAttribute(name); }
     }
 
-    static final Set<String> keysToIgnore = new HashSet<>(Arrays.asList("javax.servlet.context.tempdir",
+    static final Set<String> keysToIgnore = new HashSet<>(Arrays.asList("jakarta.servlet.context.tempdir",
             "org.apache.catalina.jsp_classpath", "org.apache.commons.fileupload.servlet.FileCleanerCleanup.FileCleaningTracker"));
 
     public static class AttributeContainerMap implements Map<String, Object> {
