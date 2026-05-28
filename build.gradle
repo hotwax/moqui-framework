@@ -1307,9 +1307,9 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
             /* ant.get does not support the file download from private repository, added git command to clone the repo,
             it will use the saved user credentials, as per current deployment process .netrc file created for the git credentials, the command line git use the credentials from the same and do the clone,
              Once we move to deploy keys based deploy we need to update the command as needed*/
-            exec {
-                commandLine 'sh', '-c', "git clone --depth 1 -b ${compVersion} ${url} ${targetDir}"
-            }
+            providers.exec {
+                commandLine 'git', 'clone', '--depth', '1', '-b', compVersion, url, targetDir.absolutePath
+            }.result.get().assertNormalExitValue()
         } else {
         File zipFile = file("${targetDirPath}.zip")
         ant.get(src: url, dest: zipFile)
@@ -1324,9 +1324,9 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
         }
     } else if (type == 'git') {
         if (privateRepo) {
-        exec {
-            commandLine 'sh', '-c', "git clone --branch ${branch} ${url} ${targetDir}"
-        }
+            providers.exec {
+                commandLine 'git', 'clone', '--branch', branch, url, targetDir.absolutePath
+            }.result.get().assertNormalExitValue()
         } else {
             Grgit.clone(dir: targetDir, uri: url, refToCheckout: branch)
         }
