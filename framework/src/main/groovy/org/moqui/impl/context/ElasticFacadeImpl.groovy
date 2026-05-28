@@ -168,7 +168,7 @@ class ElasticFacadeImpl implements ElasticFacade {
         private Map serverInfo = (Map) null
         private String esVersion = (String) null
         private boolean esVersionUnder7 = false
-        private boolean isOpenSearch = false
+        private boolean isOpenSearch = true
 
         ElasticClientImpl(MNode clusterNode, ExecutionContextFactoryImpl ecfi) {
             this.ecfi = ecfi
@@ -394,6 +394,7 @@ class ElasticFacadeImpl implements ElasticFacade {
 
             RestClient.RestResponse response = bulkResponse(index, actionSourceList, refresh)
             checkResponse(response, "Bulk operations", index)
+            checkBulkResponseErrors(response, "Bulk index", index)
         }
 
         @Override
@@ -490,7 +491,7 @@ class ElasticFacadeImpl implements ElasticFacade {
             RestClient.RestResponse response
             if (isOpenSearch) {
                 // see: https://opensearch.org/docs/latest/opensearch/point-in-time-api#create-a-pit
-                // requires 2.4.0 or later
+                // requires 3.4.0 or later
                 response = makeRestClient(Method.POST, index, "_search/point_in_time", [keep_alive:keepAlive]).call()
             } else {
                 // see: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/paginate-search-results.html#scroll-search-results
@@ -512,7 +513,7 @@ class ElasticFacadeImpl implements ElasticFacade {
             RestClient.RestResponse response
             if (isOpenSearch) {
                 // see: https://opensearch.org/docs/latest/opensearch/point-in-time-api#delete-pits
-                // requires 2.4.0 or later
+                // requires 3.4.0 or later
                 response = makeRestClient(Method.DELETE, null, "_search/point_in_time", null)
                         .text(objectToJson([pit_id:[pitId]])).call()
             } else {
@@ -740,6 +741,33 @@ class ElasticFacadeImpl implements ElasticFacade {
         logger.error("ElasticSearch ${msg}${responseText ? '\nResponse: ' + responseText : ''}${requestUri ? '\nURI: ' + requestUri : ''}${requestBody ? '\nRequest: ' + requestBody : ''}")
 
         throw new BaseException(msg)
+    }
+
+    static void checkBulkResponseErrors(RestClient.RestResponse response, String operation, String index) {
+        if (response == null) return
+        try {
+            Map responseMap = (Map) jsonToObject(response.text())
+            if (responseMap.errors == true) {
+                List<Map> items = (List<Map>) responseMap.items
+                List<String> errorMessages = []
+                for (Map item in items) {
+                    Map itemMap = (Map) item.values().first()
+                    if (itemMap.error) {
+                        String errorMsg = "Doc ${itemMap._id ?: 'unknown'}: ${itemMap.error}"
+                        errorMessages.add(errorMsg)
+                        if (errorMessages.size() >= 10) break
+                    }
+                }
+                String msg = "${operation}${index ? ' on index ' + index : ''} had ${items?.size() ?: 0} items with errors"
+                if (errorMessages) msg += ":\n  " + errorMessages.join("\n  ")
+                logger.error("ElasticSearch ${msg}")
+                throw new BaseException(msg)
+            }
+        } catch (BaseException be) {
+            throw be
+        } catch (Throwable t) {
+            logger.error("Error checking bulk response for errors: ${t.toString()}")
+        }
     }
 
     static String objectToJson(Object jsonObject) {
