@@ -81,6 +81,7 @@ abstract class EntityFindBase implements EntityFind {
     protected int resultSetConcurrency = ResultSet.CONCUR_READ_ONLY
     protected Integer fetchSize = (Integer) null
     protected Integer maxRows = (Integer) null
+    protected Integer queryTimeout = (Integer) null
 
     protected boolean disableAuthz = false
     protected boolean requireSearchFormParameters = false
@@ -637,6 +638,9 @@ abstract class EntityFindBase implements EntityFind {
 
     @Override EntityFind maxRows(Integer maxRows) { this.maxRows = maxRows; return this }
     @Override Integer getMaxRows() { return this.maxRows }
+
+    @Override EntityFind queryTimeout(Integer queryTimeout) { this.queryTimeout = queryTimeout; return this }
+    @Override Integer getQueryTimeout() { return this.queryTimeout }
 
     // ======================== Misc Methods ========================
 

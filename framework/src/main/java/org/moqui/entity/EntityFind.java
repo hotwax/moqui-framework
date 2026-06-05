@@ -250,6 +250,15 @@ public interface EntityFind extends java.io.Serializable, SimpleEtl.Extractor {
     EntityFind maxRows(Integer maxRows);
     Integer getMaxRows();
 
+    /** The JDBC query timeout in seconds for this find, passed through to Statement.setQueryTimeout().
+     * Null or 0 means no timeout (driver/datasource default). Bounds the worst-case runtime of a single
+     * query at the JDBC layer.
+     *
+     * @return Returns this for chaining of method calls.
+     */
+    EntityFind queryTimeout(Integer queryTimeout);
+    Integer getQueryTimeout();
+
     /** Disable authorization for this find */
     EntityFind disableAuthz();
     /** If true don't do find (return empty list or null) when there are no search form parameters */
