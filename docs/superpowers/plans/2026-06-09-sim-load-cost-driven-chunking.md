@@ -237,7 +237,126 @@ git commit -m "feat(sim-load): production-safety — read-only prod-source + man
 
 ---
 
-## Task 1: Config accessors + cost→rows derivation (pure)
+## Task 0C: Pre-flight read-size gate — never run a read above the cost ceiling
+
+**This is the core protection for your concern: an oversized READ can never hit prod.** Before a batch
+enters `RUNNING`, `runBatch` does a fresh `EXPLAIN FORMAT=JSON` what-if (pure read) on the exact slice and
+**refuses to execute** if the optimizer cost exceeds `targetChunkCost` (5000), unless `forceFullScan=true`.
+Fail-closed when cost is unknown. The same 5000 that chunking targets is the hard run ceiling.
+
+**Files:**
+- Modify: `runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy` (add `parseCost` + `assertReadWithinCeiling`; wire into `runBatch` ~line 360)
+- Test: `runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleIntegrationSpec.groovy`
+
+- [ ] **Step 1: Add the cost-ceiling config accessors, `parseCost`, and `assertReadWithinCeiling`**
+
+First, the config accessors (used here and by Tasks 1/4). In `SimLoadConsole.groovy`, immediately after the existing `fullChunkRows()` method (~line 73), add:
+
+```groovy
+    /** Absolute optimizer-cost ceiling — both the chunk-sizing target AND the hard run-time read ceiling. */
+    double targetChunkCost() {
+        return Double.parseDouble(System.getProperty("simulation.load.targetChunkCost", "5000"))
+    }
+
+    /** Fat-finger backstop: refuse to create more than this many chunks in one chunkBatch call. */
+    int maxChunks() {
+        return Integer.parseInt(System.getProperty("simulation.load.maxChunks", "2000"))
+    }
+```
+
+Next, the cost parser. Add next to the small `protected static` helpers (near `scalarTs`, ~line 137):
+
+```groovy
+    /** Parse a persisted/EXPLAIN queryCost (text) into a Double; null when absent/unparseable. */
+    protected static Double parseCost(String s) {
+        if (s == null || s.isEmpty()) return null
+        try { return Double.valueOf(s) } catch (NumberFormatException e) { return null }
+    }
+```
+
+Finally, the gate itself. Add this method in the "run / approve / abort" region (e.g. just before `runBatch`, ~line 350):
+
+```groovy
+    /**
+     * PRE-FLIGHT READ-SIZE GATE (PRODUCTION SAFETY): EXPLAIN the batch's slice — a pure what-if, no
+     * execution — and refuse to run when the optimizer cost exceeds targetChunkCost, unless forced.
+     * Fail-closed: if the cost cannot be determined, the run is refused unforced. Runs on a read-only
+     * prod connection (prodConn) and before the batch enters RUNNING.
+     */
+    protected void assertReadWithinCeiling(EntityValue batch, boolean force) {
+        if (force) return
+        String selectSql = buildSliceSelect(batch, false)
+        SimLoadBatchQuery.Slice sl = SimLoadBatchQuery.slice(batch.getString("tableName"), batch.getString("mode"),
+                batch.getTimestamp("sliceFrom"), batch.getTimestamp("sliceTo"))
+        double ceiling = targetChunkCost()
+        Connection my = prodConn()
+        try {
+            Double c = parseCost(explainJsonCost(my, selectSql, sl.params))
+            if (c == null) c = parseCost(batch.getString("queryCost"))
+            if (c == null)
+                throw new IllegalStateException("refusing to run ${batch.getString('loadBatchId')}: read cost unavailable (EXPLAIN cost null) — pass forceFullScan=true to override")
+            if (c > ceiling)
+                throw new IllegalStateException("refusing to run ${batch.getString('loadBatchId')}: read cost ${c} exceeds ceiling ${ceiling} — chunk it smaller, or pass forceFullScan=true to override")
+        } finally { try { my.close() } catch (Throwable ignore) {} }
+    }
+```
+
+- [ ] **Step 2: Wire the gate into `runBatch` (before it enters RUNNING)**
+
+In `runBatch`, immediately after the concurrent-RUNNING guard (currently line 358-359, the `another batch is RUNNING` check) and **before** `long t0 = System.currentTimeMillis()` (line 361), add:
+
+```groovy
+        assertReadWithinCeiling(batch, forceFullScan)   // PRODUCTION SAFETY: refuse an oversized read (pure EXPLAIN what-if)
+```
+
+Placing it here (outside the try/catch that begins at line 371) means a refused batch throws cleanly, stays `APPROVED`, and never transitions to `RUNNING`/`FAILED` or touches data.
+
+- [ ] **Step 3: Compile-check**
+
+Run: `./gradlew :runtime:component:sim-routing:compileGroovy`
+Expected: BUILD SUCCESSFUL. (`buildSliceSelect`, `explainJsonCost`, `SimLoadBatchQuery`, `Connection` all already present/imported.)
+
+- [ ] **Step 4: Add the refusal integration test**
+
+In `SimLoadConsoleIntegrationSpec.groovy`, add (forces the ceiling below `product_facility`'s ~1312 whole-table cost; asserts refusal with no execution):
+
+```groovy
+    def "runBatch refuses a read whose EXPLAIN cost exceeds the ceiling"() {
+        given: "ceiling forced to 100, below product_facility's whole-table cost (~1312)"
+        System.setProperty("simulation.load.targetChunkCost", "100")
+        def console = new SimLoadConsole(ec)
+        String id = console.generateBatches("product_facility", "FULL", null, null)[0]
+        console.analyzeBatch(id)
+
+        when: "approve & run without force -> blocked by the pre-flight gate, before RUNNING"
+        console.approveAndRun(id, false)
+
+        then:
+        thrown(IllegalStateException)
+        ec.entity.find("co.hotwax.order.routing.simulation.BrokeringSimLoadBatch").condition("loadBatchId", id).one().getString("statusId") == "APPROVED"
+
+        cleanup:
+        System.clearProperty("simulation.load.targetChunkCost")
+        ec.entity.find("co.hotwax.order.routing.simulation.BrokeringSimLoadBatch").condition("loadBatchId", id).deleteAll()
+    }
+```
+
+- [ ] **Step 5: Run the unit suite (no regressions)**
+
+Run: `./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
+Expected: PASS (the gate is integration-verified in Step 4 / Task 7).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy \
+        runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleIntegrationSpec.groovy
+git commit -m "feat(sim-load): pre-flight read-size gate — refuse reads above the cost ceiling"
+```
+
+---
+
+## Task 1: Cost→rows derivation (pure)
 
 **Files:**
 - Modify: `runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy`
@@ -274,21 +393,13 @@ Add these methods to `SimLoadConsoleSpec` (after the existing `shouldRunCount` t
 Run: `./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
 Expected: FAIL — `deriveTargetRows` cannot be resolved (compile error / missing method).
 
-- [ ] **Step 3: Implement the config accessors + derivation**
+- [ ] **Step 3: Implement the derivation**
 
-In `SimLoadConsole.groovy`, immediately after the existing `fullChunkRows()` method (line ~73), add:
+> The config accessors `targetChunkCost()` / `maxChunks()` are already added in Task 0C — do not re-add them.
+
+In `SimLoadConsole.groovy`, immediately after the `maxChunks()` method (added in Task 0C, ~line 80), add:
 
 ```groovy
-    /** Absolute optimizer-cost ceiling per chunk — the driving input for chunking. */
-    double targetChunkCost() {
-        return Double.parseDouble(System.getProperty("simulation.load.targetChunkCost", "5000"))
-    }
-
-    /** Fat-finger backstop: refuse to create more than this many chunks in one call. */
-    int maxChunks() {
-        return Integer.parseInt(System.getProperty("simulation.load.maxChunks", "2000"))
-    }
-
     /**
      * Rows-per-chunk implied by a target cost ceiling, from the analyzed whole-table query_cost and row
      * estimate (optimizer cost scales ~linearly with rows scanned). Returns -1 when cost is unusable —
@@ -313,7 +424,7 @@ Expected: PASS (both new tests green; existing tests still pass).
 ```bash
 git add runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy \
         runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleSpec.groovy
-git commit -m "feat(sim-load): cost-ceiling config + cost->rows derivation"
+git commit -m "feat(sim-load): cost->rows derivation"
 ```
 
 ---
@@ -554,21 +665,9 @@ git commit -m "feat(sim-load): FULL generate yields a single whole-table batch"
 **Files:**
 - Modify: `runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy`
 
-> Note: this is the DB-touching glue (opens `prodConn`, runs the probe SQL, derives the target, creates children, supersedes the parent). It is verified by the integration test in Task 7. No new unit test here — the pure pieces it composes (`deriveTargetRows`, `computeKeysetChunks`) are already unit-tested in Tasks 1-2.
+> Note: this is the DB-touching glue (opens `prodConn`, runs the probe SQL, derives the target, creates children, supersedes the parent). It is verified by the integration test in Task 7. No new unit test here — the pure pieces it composes (`deriveTargetRows`, `computeKeysetChunks`) are already unit-tested in Tasks 1-2. `parseCost` and `assertKnownTable` are already present from Tasks 0B/0C.
 
-- [ ] **Step 1: Add `parseCost` helper**
-
-In `SimLoadConsole.groovy`, next to the other small `protected static` helpers (near `scalarTs`, ~line 133), add:
-
-```groovy
-    /** Parse the persisted queryCost (text-short) into a Double; null when absent/unparseable. */
-    protected static Double parseCost(String s) {
-        if (s == null || s.isEmpty()) return null
-        try { return Double.valueOf(s) } catch (NumberFormatException e) { return null }
-    }
-```
-
-- [ ] **Step 2: Add the `chunkBatch` method**
+- [ ] **Step 1: Add the `chunkBatch` method**
 
 In `SimLoadConsole.groovy`, in the "run / approve / abort" region (e.g. just before `approveAndRun`, ~line 337), add:
 
@@ -671,17 +770,17 @@ In `SimLoadConsole.groovy`, in the "run / approve / abort" region (e.g. just bef
     }
 ```
 
-- [ ] **Step 3: Compile-check the component**
+- [ ] **Step 2: Compile-check the component**
 
 Run: `./gradlew :runtime:component:sim-routing:compileGroovy`
 Expected: BUILD SUCCESSFUL (no missing-symbol / type errors). `PreparedStatement`, `ResultSet`, `Connection`, `Timestamp` are already imported at the top of the file.
 
-- [ ] **Step 4: Run the unit suite (no regressions)**
+- [ ] **Step 3: Run the unit suite (no regressions)**
 
 Run: `./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
 Expected: PASS (unchanged — `chunkBatch` is exercised in Task 7).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy
@@ -905,6 +1004,8 @@ Re-read `docs/superpowers/specs/2026-06-09-sim-load-cost-driven-chunking-design.
 - **Spec coverage:** §2/§7 EXPLAIN-only analysis invariant → Task 0; §3 workflow → Tasks 3,5,6; §4 cost sizing + under-ceiling no-op → Tasks 1,4,7; §5 windowed keyset walk → Tasks 2,4; §6 service/screen + recursive (FULL *and* RANGE) → Tasks 4,5,6; §7 guards (maxChunks, no-tx-stamp, dedup, one-at-a-time unchanged) → Task 4. Covered.
 - **EXPLAIN-only invariant:** Task 0 removes the only executing statement in analyze (`COUNT(*)`); Task 0 Step 5 greps to prove only `EXPLAIN`/`EXPLAIN FORMAT=JSON` execute in the analyze path. Chunk-step probes (Task 4) and the Run-step SELECT+MERGE are deliberately outside "analysis."
 - **Production-safety invariant (Task 0B):** all prod access funnels through a read-only `prodConn()` (JDBC-level write ban), every prod table name passes `assertKnownTable`, and all writes go to the H2 `simulation` datasource only. `assertKnownTable` is unit-tested; read-only is asserted in the integration spec (`prodConn().isReadOnly()`). Wired into `analyzeBatch`, `runBatch`, and `chunkBatch`.
+- **Read-size gate (Task 0C) — the core protection against an oversized read:** `runBatch` runs a fresh `EXPLAIN FORMAT=JSON` what-if before entering RUNNING and refuses any read whose cost exceeds `targetChunkCost` (5000), fail-closed, force-overridable. The 5000 chunk target IS the hard run ceiling (single property). Integration-tested by forcing the ceiling to 100 and asserting `product_facility` (~1312) is refused without execution. Depends on `parseCost` (introduced here) and `targetChunkCost` (Task 1).
+- **Step-ordering:** Tasks run 0 → 0B → 0C → 1 → … → 8. Config accessors `targetChunkCost()`/`maxChunks()` are defined in **Task 0C** (their first consumer); Task 1 adds only `deriveTargetRows`; Task 4 (`chunkBatch`) uses all three. `parseCost`/`assertKnownTable` are defined in Tasks 0C/0B before their Task 4 use. No forward references.
 - **Type consistency:** `BoundaryProbe.at(Timestamp,long)` / `nextDistinct(Timestamp)` used identically in the test fake (Task 2), the chunker (Task 2), and the DB probe (Task 4). `deriveTargetRows(Double,Long,double)→long` and `parseCost(String)→Double` signatures match across Tasks 1/4/7. `chunkBatch(String,Double,Integer)` matches the service call in Task 5.
 - **Recursion:** `chunkBatch` accepts `mode in (FULL, RANGE)` and seeds the keyset walk from `sliceFrom`/`sliceTo` when present, so a RANGE child re-chunks within its own window (Task 4) — Task 7's contiguity assertion exercises the FULL case; RANGE-of-RANGE follows the same code path.
 - **No placeholders:** every code step shows complete code; every run step shows the command + expected result.

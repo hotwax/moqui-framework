@@ -73,11 +73,17 @@ single whole-table batch. `DAY` / `RANGE` generation with operator-supplied `fro
 
 ## 4. Cost-driven sizing
 
-The driving input is an **absolute target-cost ceiling per chunk** — "no chunk should cost more than
+The driving input is an **absolute target-cost ceiling per read** — "no read should cost more than
 `targetChunkCost`" — *not* a ratio of the whole-table cost. The DB cares about the absolute cost of each
 query it runs, so an absolute ceiling makes small tables stay one batch and only splits genuinely
 expensive tables, as much as their cost demands. (A relative `cost / N` default was rejected: it always
 yields ~N chunks regardless of table size — count-driven in disguise.)
+
+**The same number is the hard run-time gate (the real protection — see §7).** `targetChunkCost` is not
+just what chunking *aims* for; it is the ceiling the run step *enforces*. A batch whose EXPLAIN cost
+exceeds it is **refused at run time** unless explicitly forced. So chunking isn't advisory — it is the
+only way to get a large read past the gate, and an oversized scan can never be fired at prod by accident.
+Default **5000**; one property serves both roles.
 
 Analysis persists `query_cost` (whole-table optimizer cost) and `estimatedRows` (EXPLAIN estimate) — both
 from `EXPLAIN` (the guarded `COUNT(*)` is **removed**; Analyze is EXPLAIN-only per §2/§7, so `exactCount`
@@ -187,6 +193,16 @@ delta-sync watermark.
 - **Table names are manifest-validated.** Before any table name is interpolated into a prod SQL string,
   `assertKnownTable` rejects anything not in `SourceTableManifest` — no arbitrary or typo'd identifier
   can reach a production query.
+- **Pre-flight read-size gate (the core protection).** `runBatch` does a fresh `EXPLAIN FORMAT=JSON`
+  what-if on the exact slice SELECT (data may have grown since Analyze) and **refuses to execute any read
+  whose optimizer cost exceeds `targetChunkCost` (5000)** unless `forceFullScan=true`. The check runs
+  *before* the batch enters `RUNNING` and is a pure read (EXPLAIN, no execution). Fail-closed: if the cost
+  cannot be determined (EXPLAIN cost null and no stored cost), the run is refused unforced. This is what
+  guarantees no oversized read ever hits prod — a big whole-table SELECT fails the gate and *must* be
+  chunked smaller first.
+  - Interaction with the tie caveat (§5): a single-`tx_stamp` chunk that still EXPLAINs above the ceiling
+    cannot be split finer on the watermark, so it is refused and requires an explicit `forceFullScan` —
+    a deliberate operator decision, never automatic.
 - **Max-chunk backstop** — `simulation.load.maxChunks` (default `2000`): if the derived target would
   imply more chunks than the cap (checked against `estimatedRows / target_rows`), `chunkBatch` refuses
   and tells the operator to raise the target. This is a fat-finger backstop only; it never *drives* the
@@ -196,9 +212,10 @@ delta-sync watermark.
 
 ## 8. Config (system properties)
 
-- `simulation.load.targetChunkCost` (default `5000`) — **the driving input**: absolute optimizer-cost
-  ceiling per chunk. Pre-fills the Chunk action; whole-table cost at or under it → no split. Expected to
-  be re-tuned once a real large table's cost is observed.
+- `simulation.load.targetChunkCost` (default `5000`) — **the driving input AND the hard run-time
+  ceiling** (one number, both roles). As the chunk target: pre-fills the Chunk action; whole-table cost
+  at or under it → no split. As the run gate (§7): a read EXPLAINing above it is refused unless forced.
+  Expected to be re-tuned once a real large table's cost is observed.
 - `simulation.load.fullChunkRows` (default `100000`) — now only the **rows-fallback** pre-fill when cost
   is unavailable (no longer the generate-time auto-chunk target).
 - `simulation.load.maxChunks` (default `2000`) — new fat-finger backstop (§7).
