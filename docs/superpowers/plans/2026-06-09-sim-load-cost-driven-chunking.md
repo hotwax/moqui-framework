@@ -32,6 +32,84 @@
 
 ---
 
+## Task 0: Make Analyze EXPLAIN-only (remove the guarded COUNT)
+
+**Hard invariant (spec §2/§7): the Analyze step must NEVER execute the query** — only `EXPLAIN` and
+`EXPLAIN FORMAT=JSON`. Today `analyzeBatch` runs a guarded `SELECT COUNT(*)` (`SimLoadConsole.groovy:298-305`),
+which physically counts rows for small tables. Remove it. Cost sizing uses the EXPLAIN `estimatedRows`, so
+nothing downstream needs the exact count.
+
+**Files:**
+- Modify: `runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy` (`analyzeBatch` ~lines 296-306; delete `shouldRunCount` ~lines 151-155)
+- Test: `runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleSpec.groovy` (delete the `shouldRunCount` test ~lines 57-65)
+
+- [ ] **Step 1: Remove the COUNT execution from `analyzeBatch`**
+
+In `SimLoadConsole.groovy`, replace this block (currently ~lines 296-306):
+
+```groovy
+            int threshold = countThreshold()
+
+            Long exact = null
+            if (shouldRunCount(sum.estimatedRows, threshold)) {
+                PreparedStatement cps = my.prepareStatement(buildSliceSelect(batch, true))
+                bindParams(cps, sl.params)
+                ResultSet crs = cps.executeQuery()
+                if (crs.next()) exact = (Long) crs.getLong(1)
+                cps.close()
+            }
+            String diagnostic = buildDiagnostic(batch, sum, queryCost, threshold)
+```
+
+with:
+
+```groovy
+            int threshold = countThreshold()
+            // EXPLAIN-ONLY INVARIANT (spec §2/§7): analysis must never execute the query. No data SELECT,
+            // no COUNT(*), no EXPLAIN ANALYZE. exactCount is intentionally left null; cost sizing uses the
+            // optimizer's estimatedRows from EXPLAIN, not a physical count.
+            Long exact = null
+            String diagnostic = buildDiagnostic(batch, sum, queryCost, threshold)
+```
+
+- [ ] **Step 2: Delete the now-unused `shouldRunCount` predicate**
+
+In `SimLoadConsole.groovy`, delete the `shouldRunCount` method and its doc comment (currently ~lines 151-155):
+
+```groovy
+    /** COUNT when the estimate is under the threshold — scanning &lt; threshold rows is cheap whether or
+     *  not it uses an index, so the row estimate (not the access path) is the load gate. */
+    boolean shouldRunCount(long estimatedRows, int threshold) {
+        return estimatedRows < threshold
+    }
+```
+
+Leave `countThreshold()` and `buildDiagnostic` in place — `buildDiagnostic` still uses the threshold to phrase its warnings (now "COUNT skipped" is always the case). Also fix the stale comment inside `buildDiagnostic` (currently ~line 237) from `// Under threshold → cheap; the exact COUNT ran.` to `// Under threshold → cheap full scan; no warning (analysis is EXPLAIN-only — see analyzeBatch).`
+
+- [ ] **Step 3: Delete the obsolete `shouldRunCount` unit test**
+
+In `SimLoadConsoleSpec.groovy`, delete the test `"shouldRunCount runs COUNT iff the estimate is under the threshold (access path irrelevant)"` (currently ~lines 57-65).
+
+- [ ] **Step 4: Verify build + unit suite**
+
+Run: `./gradlew :runtime:component:sim-routing:compileGroovy && ./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
+Expected: BUILD SUCCESSFUL; tests PASS (no reference to `shouldRunCount` remains).
+
+- [ ] **Step 5: Prove no execution path remains in analyze**
+
+Run: `grep -n "executeQuery\|COUNT(\*)" runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy`
+Expected: the only `executeQuery` calls remaining in `analyzeBatch`'s region are the two `EXPLAIN` statements (the `EXPLAIN ` prepared statement and the `EXPLAIN FORMAT=JSON` in `explainJsonCost`). No `COUNT(*)` SELECT and no bare data-`SELECT` execution in the analyze path. (The `mergeResultSet`/`runBatch` execution is the Run step, not analyze — that's expected.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy \
+        runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleSpec.groovy
+git commit -m "feat(sim-load): analyze is EXPLAIN-only — drop the guarded COUNT"
+```
+
+---
+
 ## Task 1: Config accessors + cost→rows derivation (pure)
 
 **Files:**
@@ -696,7 +774,8 @@ Re-read `docs/superpowers/specs/2026-06-09-sim-load-cost-driven-chunking-design.
 
 ## Self-Review Notes (author)
 
-- **Spec coverage:** §3 workflow → Tasks 3,5,6; §4 cost sizing + under-ceiling no-op → Tasks 1,4,7; §5 windowed keyset walk → Tasks 2,4; §6 service/screen + recursive (FULL *and* RANGE) → Tasks 4,5,6; §7 guards (maxChunks, no-tx-stamp, dedup, one-at-a-time unchanged) → Task 4. Covered.
+- **Spec coverage:** §2/§7 EXPLAIN-only analysis invariant → Task 0; §3 workflow → Tasks 3,5,6; §4 cost sizing + under-ceiling no-op → Tasks 1,4,7; §5 windowed keyset walk → Tasks 2,4; §6 service/screen + recursive (FULL *and* RANGE) → Tasks 4,5,6; §7 guards (maxChunks, no-tx-stamp, dedup, one-at-a-time unchanged) → Task 4. Covered.
+- **EXPLAIN-only invariant:** Task 0 removes the only executing statement in analyze (`COUNT(*)`); Task 0 Step 5 greps to prove only `EXPLAIN`/`EXPLAIN FORMAT=JSON` execute in the analyze path. Chunk-step probes (Task 4) and the Run-step SELECT+MERGE are deliberately outside "analysis."
 - **Type consistency:** `BoundaryProbe.at(Timestamp,long)` / `nextDistinct(Timestamp)` used identically in the test fake (Task 2), the chunker (Task 2), and the DB probe (Task 4). `deriveTargetRows(Double,Long,double)→long` and `parseCost(String)→Double` signatures match across Tasks 1/4/7. `chunkBatch(String,Double,Integer)` matches the service call in Task 5.
 - **Recursion:** `chunkBatch` accepts `mode in (FULL, RANGE)` and seeds the keyset walk from `sliceFrom`/`sliceTo` when present, so a RANGE child re-chunks within its own window (Task 4) — Task 7's contiguity assertion exercises the FULL case; RANGE-of-RANGE follows the same code path.
 - **No placeholders:** every code step shows complete code; every run step shows the command + expected result.

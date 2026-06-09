@@ -42,6 +42,12 @@ Two further problems with the current model:
   how `last_updated_tx_stamp` is distributed.
 - **Don't overwhelm the source DB.** Boundary computation scans the indexed column **once** total; runs
   stay one-at-a-time (unchanged).
+- **Analysis NEVER executes the query.** The Analyze step issues only `EXPLAIN` and
+  `EXPLAIN FORMAT=JSON` — never the data `SELECT`, never `COUNT(*)`, never `EXPLAIN ANALYZE`. EXPLAIN
+  asks the optimizer for the plan/cost (a few index-dive page reads) and returns; it does not run the
+  query or touch the matched rows. Cost sizing uses the EXPLAIN **row estimate**, not an exact count.
+  (Only the Chunk step runs lightweight *indexed* boundary probes; only the Run step executes the data
+  `SELECT` + `MERGE`, and only after approval.)
 
 ### Non-goals
 - Steady-state delta sync (unchanged).
@@ -74,8 +80,8 @@ expensive tables, as much as their cost demands. (A relative `cost / N` default 
 yields ~N chunks regardless of table size — count-driven in disguise.)
 
 Analysis persists `query_cost` (whole-table optimizer cost) and `estimatedRows` (EXPLAIN estimate) — both
-from `EXPLAIN`, so they are available **even for large tables where the exact COUNT is skipped**. Because
-optimizer cost scales ~linearly with rows scanned:
+from `EXPLAIN` (the guarded `COUNT(*)` is **removed**; Analyze is EXPLAIN-only per §2/§7, so `exactCount`
+is left null). Because optimizer cost scales ~linearly with rows scanned:
 
 ```
 if query_cost <= targetChunkCost:  → single chunk, no split (already under the ceiling)
@@ -166,6 +172,10 @@ delta-sync watermark.
 
 ## 7. Guards
 
+- **Analysis is EXPLAIN-only** — `analyzeBatch` issues only `EXPLAIN` + `EXPLAIN FORMAT=JSON`; the
+  guarded `COUNT(*)` is removed. No data `SELECT`, no `COUNT`, no `EXPLAIN ANALYZE` ever runs during
+  analysis. This is a hard invariant (see §2) — the cost figures come from the optimizer, not from
+  executing anything.
 - **Max-chunk backstop** — `simulation.load.maxChunks` (default `2000`): if the derived target would
   imply more chunks than the cap (checked against `estimatedRows / target_rows`), `chunkBatch` refuses
   and tells the operator to raise the target. This is a fat-finger backstop only; it never *drives* the
