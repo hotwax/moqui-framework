@@ -203,6 +203,16 @@ delta-sync watermark.
   - Interaction with the tie caveat (§5): a single-`tx_stamp` chunk that still EXPLAINs above the ceiling
     cannot be split finer on the watermark, so it is refused and requires an explicit `forceFullScan` —
     a deliberate operator decision, never automatic.
+- **Keep optimizer stats fresh — `ANALYZE TABLE` before a load campaign.** The gate (above) and cost
+  sizing (§4) rely on the optimizer's `query_cost`/`rows` estimate. For our indexed `last_updated_tx_stamp`
+  ranges that estimate comes from **index dives** and is normally accurate, but it can drift when InnoDB
+  persistent statistics are stale. **Recommended operational step: run `ANALYZE TABLE <table>` on the
+  source table before chunking/loading** — a light, read-only stats refresh that sharpens every dive/cost
+  the gate depends on. Estimate error is also asymmetric and safe-by-default: an *over*-estimate only
+  causes extra chunking or a needless refusal, while the only risky direction — an *under*-estimate
+  slipping a too-big read past the gate — is bounded (for an indexed range it is typically small, capped
+  by the conservative `targetChunkCost` ceiling, run one-at-a-time with an abort flag) and **never trusted
+  for chunk boundaries**, which use real `OFFSET` row positions (§5), not the estimate.
 - **Max-chunk backstop** — `simulation.load.maxChunks` (default `2000`): if the derived target would
   imply more chunks than the cap (checked against `estimatedRows / target_rows`), `chunkBatch` refuses
   and tells the operator to raise the target. This is a fat-finger backstop only; it never *drives* the
