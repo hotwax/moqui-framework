@@ -176,6 +176,17 @@ delta-sync watermark.
   guarded `COUNT(*)` is removed. No data `SELECT`, no `COUNT`, no `EXPLAIN ANALYZE` ever runs during
   analysis. This is a hard invariant (see §2) — the cost figures come from the optimizer, not from
   executing anything.
+- **Prod source is opened READ-ONLY.** Every `prod-source` connection is acquired through the single
+  `prodConn()` chokepoint, which sets `Connection.setReadOnly(true)`. Whatever runs against prod —
+  an EXPLAIN, a chunk boundary probe, or the run-time fetch — is on a read-only connection, so writing
+  to production is **structurally impossible at the JDBC layer, independent of the SQL text**. The
+  run-time fetch additionally uses a forward-only, read-only cursor. (Defense in depth, outside this
+  code: the `prod-source` DB account should hold SELECT-only grants.)
+- **All writes target H2 only.** The MERGE writes exclusively to the `simulation` (H2 `LIVE.*`)
+  datasource; the `prod-source` connection is never written.
+- **Table names are manifest-validated.** Before any table name is interpolated into a prod SQL string,
+  `assertKnownTable` rejects anything not in `SourceTableManifest` — no arbitrary or typo'd identifier
+  can reach a production query.
 - **Max-chunk backstop** — `simulation.load.maxChunks` (default `2000`): if the derived target would
   imply more chunks than the cap (checked against `estimatedRows / target_rows`), `chunkBatch` refuses
   and tells the operator to raise the target. This is a fat-finger backstop only; it never *drives* the

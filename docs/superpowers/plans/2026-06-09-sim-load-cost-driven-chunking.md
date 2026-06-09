@@ -110,6 +110,133 @@ git commit -m "feat(sim-load): analyze is EXPLAIN-only — drop the guarded COUN
 
 ---
 
+## Task 0B: Production-safety — read-only prod connection + manifest-validated tables
+
+**Goal: make harm to prod structurally impossible, not incidental.** Every `prod-source` connection is
+opened READ-ONLY (so the JDBC layer rejects any write regardless of SQL), and no table name reaches a prod
+SQL string unless it is in `SourceTableManifest`.
+
+**Files:**
+- Modify: `runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy` (`prodConn` ~lines 322-325; `analyzeBatch` ~line 282; `runBatch` ~lines 364,373)
+- Test: `runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleSpec.groovy`
+- Test: `runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleIntegrationSpec.groovy`
+
+- [ ] **Step 1: Write the failing unit tests for the manifest guard**
+
+Add to `SimLoadConsoleSpec`:
+
+```groovy
+    def "assertKnownTable rejects a table that is not in the manifest"() {
+        when: SimLoadConsole.assertKnownTable("drop_me; truncate orders")
+        then: thrown(IllegalArgumentException)
+    }
+
+    def "assertKnownTable accepts a manifest table"() {
+        when: SimLoadConsole.assertKnownTable("product_facility")
+        then: notThrown(IllegalArgumentException)
+    }
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
+Expected: FAIL — `assertKnownTable` does not exist (compile error).
+
+- [ ] **Step 3: Add `assertKnownTable` and make `prodConn` read-only**
+
+In `SimLoadConsole.groovy`, replace `prodConn` (lines 322-325):
+
+```groovy
+    protected Connection prodConn() {
+        return ((org.moqui.impl.entity.EntityFacadeImpl) ec.entity)
+                .getDatasourceFactory("prod-source").getDataSource().getConnection()
+    }
+```
+
+with:
+
+```groovy
+    /** The ONLY way to open a prod-source connection. PRODUCTION SAFETY: read-only, so the JDBC layer
+     *  forbids any write to prod regardless of the SQL text. (SourceTableManifest is same-package.) */
+    protected Connection prodConn() {
+        Connection c = ((org.moqui.impl.entity.EntityFacadeImpl) ec.entity)
+                .getDatasourceFactory("prod-source").getDataSource().getConnection()
+        c.setReadOnly(true)
+        return c
+    }
+
+    /** PRODUCTION SAFETY: refuse to interpolate any table name into prod SQL unless it is a known
+     *  manifest table — blocks arbitrary/typo'd identifiers from ever reaching a production query. */
+    protected static void assertKnownTable(String tableName) {
+        if (SourceTableManifest.byTableName(tableName) == null)
+            throw new IllegalArgumentException("refusing to query unknown table '${tableName}' (not in SourceTableManifest)")
+    }
+```
+
+- [ ] **Step 4: Run to verify the unit tests pass**
+
+Run: `./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
+Expected: PASS.
+
+- [ ] **Step 5: Wire the guard into `analyzeBatch` and route `runBatch` through `prodConn()`**
+
+In `analyzeBatch`, immediately after the null check (currently line 282 `if (batch == null) throw ...`), add:
+
+```groovy
+        assertKnownTable(batch.getString("tableName"))
+```
+
+In `runBatch`, immediately after `String tbl = batch.getString("tableName")` (currently line 364), add:
+
+```groovy
+        assertKnownTable(tbl)
+```
+
+In `runBatch`, change the direct prod connection acquisition (currently line 373):
+
+```groovy
+            my = efi.getDatasourceFactory("prod-source").getDataSource().getConnection(); my.setAutoCommit(true)
+```
+
+to use the read-only chokepoint:
+
+```groovy
+            my = prodConn(); my.setAutoCommit(true)   // read-only (PRODUCTION SAFETY); fetch uses a read-only cursor below
+```
+
+(The `h2` connection on the line above stays as-is — it is the writable `simulation` target.)
+
+- [ ] **Step 6: Add the read-only integration assertion**
+
+In `SimLoadConsoleIntegrationSpec.groovy`, add this feature method (it only opens and inspects a connection — harmless against prod):
+
+```groovy
+    def "prod-source connections are opened read-only"() {
+        when:
+        def c = new SimLoadConsole(ec).prodConn()
+        then:
+        c.isReadOnly()
+        cleanup:
+        try { c?.close() } catch (Throwable ignore) {}
+    }
+```
+
+- [ ] **Step 7: Verify build + unit suite**
+
+Run: `./gradlew :runtime:component:sim-routing:compileGroovy && ./gradlew :runtime:component:sim-routing:test --tests "co.hotwax.order.routing.simulation.sync.SimLoadConsoleSpec"`
+Expected: BUILD SUCCESSFUL; tests PASS. (The read-only integration assertion runs with `integrationTest` in Task 7.)
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add runtime/component/sim-routing/src/main/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsole.groovy \
+        runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleSpec.groovy \
+        runtime/component/sim-routing/src/test/groovy/co/hotwax/order/routing/simulation/sync/SimLoadConsoleIntegrationSpec.groovy
+git commit -m "feat(sim-load): production-safety — read-only prod-source + manifest-validated tables"
+```
+
+---
+
 ## Task 1: Config accessors + cost→rows derivation (pure)
 
 **Files:**
@@ -464,6 +591,7 @@ In `SimLoadConsole.groovy`, in the "run / approve / abort" region (e.g. just bef
         if (mode != "FULL" && mode != "RANGE")
             throw new IllegalStateException("only FULL/RANGE batches can be chunked, not ${mode}")
         String tbl = batch.getString("tableName")
+        assertKnownTable(tbl)   // PRODUCTION SAFETY: never interpolate an unknown table into a prod probe (Task 0B)
 
         double ceiling = (targetChunkCostIn != null) ? targetChunkCostIn.doubleValue() : targetChunkCost()
         Double cost = parseCost(batch.getString("queryCost"))
@@ -776,6 +904,7 @@ Re-read `docs/superpowers/specs/2026-06-09-sim-load-cost-driven-chunking-design.
 
 - **Spec coverage:** §2/§7 EXPLAIN-only analysis invariant → Task 0; §3 workflow → Tasks 3,5,6; §4 cost sizing + under-ceiling no-op → Tasks 1,4,7; §5 windowed keyset walk → Tasks 2,4; §6 service/screen + recursive (FULL *and* RANGE) → Tasks 4,5,6; §7 guards (maxChunks, no-tx-stamp, dedup, one-at-a-time unchanged) → Task 4. Covered.
 - **EXPLAIN-only invariant:** Task 0 removes the only executing statement in analyze (`COUNT(*)`); Task 0 Step 5 greps to prove only `EXPLAIN`/`EXPLAIN FORMAT=JSON` execute in the analyze path. Chunk-step probes (Task 4) and the Run-step SELECT+MERGE are deliberately outside "analysis."
+- **Production-safety invariant (Task 0B):** all prod access funnels through a read-only `prodConn()` (JDBC-level write ban), every prod table name passes `assertKnownTable`, and all writes go to the H2 `simulation` datasource only. `assertKnownTable` is unit-tested; read-only is asserted in the integration spec (`prodConn().isReadOnly()`). Wired into `analyzeBatch`, `runBatch`, and `chunkBatch`.
 - **Type consistency:** `BoundaryProbe.at(Timestamp,long)` / `nextDistinct(Timestamp)` used identically in the test fake (Task 2), the chunker (Task 2), and the DB probe (Task 4). `deriveTargetRows(Double,Long,double)→long` and `parseCost(String)→Double` signatures match across Tasks 1/4/7. `chunkBatch(String,Double,Integer)` matches the service call in Task 5.
 - **Recursion:** `chunkBatch` accepts `mode in (FULL, RANGE)` and seeds the keyset walk from `sliceFrom`/`sliceTo` when present, so a RANGE child re-chunks within its own window (Task 4) — Task 7's contiguity assertion exercises the FULL case; RANGE-of-RANGE follows the same code path.
 - **No placeholders:** every code step shows complete code; every run step shows the command + expected result.
