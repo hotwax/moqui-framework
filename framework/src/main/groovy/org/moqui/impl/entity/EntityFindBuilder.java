@@ -778,7 +778,9 @@ public class EntityFindBuilder extends EntityQueryBuilder {
             Integer maxRows = entityFindBase.getMaxRows();
             Integer fetchSize = entityFindBase.getFetchSize();
             Integer queryTimeout = entityFindBase.getQueryTimeout();
-            if (maxRows != null && maxRows > 0) ps.setMaxRows(maxRows);
+            // NOTE: always set max rows: pooled PreparedStatements are cached by SQL and retain maxRows from a
+            // prior use, silently truncating unbounded finds and making setFetchSize() throw when fetchSize > maxRows
+            ps.setMaxRows(maxRows != null && maxRows > 0 ? maxRows : 0);
             if (queryTimeout != null && queryTimeout > 0) ps.setQueryTimeout(queryTimeout);
             // NOTE: always set a fetch size, without explicit fetch size some JDBC drivers (like MySQL Connector/J) will try to fetch all rows
             // NOTE: the default here of 1000 is a balance between memory use and network overhead, 100 rows generally being easy to accommodate
