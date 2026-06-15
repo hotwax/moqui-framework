@@ -648,22 +648,6 @@ class EntityDataLoaderImpl implements EntityDataLoader {
             this.valueHandler = valueHandler
         }
 
-        // Called before each new file is parsed; resets per-file SAX handler state so
-        // that stale loadElements=true from a prior data file doesn't bleed into an
-        // entity definition file (which has <entities> root, not <entity-facade-xml>).
-        void setLocation(String loc) {
-            this.location = loc
-            this.loadElements = false
-            this.currentEntityDef = null
-            this.entityOperation = null
-            this.currentServiceDef = null
-            this.rootValueMap = null
-            this.valueMapStack = null
-            this.relatedEdStack = null
-            this.currentFieldName = null
-            this.currentFieldValue = null
-        }
-
         ValueHandler getValueHandler() { return valueHandler }
         long getValuesRead() { return valuesRead }
         List<String> getMessageList() { return messageList }

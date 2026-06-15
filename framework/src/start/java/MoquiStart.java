@@ -100,7 +100,7 @@ public class MoquiStart {
             System.out.println("    no-run-es ------------------- Don't Try starting and stopping ElasticSearch in runtime/elasticsearch");
             System.out.println("    If no -types or -location argument is used all known data files of all types will be loaded.");
             System.out.println("[default] ---- Run embedded Jetty server");
-            System.out.println("    port=<port> ---------------- The http listening port. Default is 8075");
+            System.out.println("    port=<port> ---------------- The http listening port. Default is 8080");
             System.out.println("    threads=<max threads> ------ Maximum number of threads. Default is 100");
             System.out.println("    conf=<moqui.conf> ---------- The Moqui Conf XML file to use, overrides other ways of specifying it");
             System.out.println("    no-run-es ------------------- Don't Try starting and stopping OpenSearch in runtime/opensearch or ElasticSearch in runtime/elasticsearch");
@@ -184,7 +184,7 @@ public class MoquiStart {
         }
 
         try {
-            int port = 8075;
+            int port = 8080;
             String portStr = argMap.get("port");
             if (portStr != null && portStr.length() > 0) port = Integer.parseInt(portStr);
             int threads = 100;
@@ -417,7 +417,7 @@ public class MoquiStart {
             server.addConnector(httpsConnector);
 
             ServerConnector httpConnector = new org.eclipse.jetty.server.ServerConnector(server, http1, http2c);
-            httpConnector.setPort(8075);
+            httpConnector.setPort(8080);
             server.addConnector(httpConnector);
 
             */
