@@ -1653,9 +1653,9 @@ index 9d4c3749..bc8a99f2 100644
 --- framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy
 +++ framework/src/main/groovy/org/moqui/impl/webapp/MoquiAbstractEndpoint.groovy
 @@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
- import javax.servlet.http.HttpSession
- import javax.websocket.*
- import javax.websocket.server.HandshakeRequest
+ import jakarta.servlet.http.HttpSession
+ import jakarta.websocket.*
+ import jakarta.websocket.server.HandshakeRequest
 +import java.nio.channels.ClosedChannelException
  
  /**
