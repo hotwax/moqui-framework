@@ -1284,9 +1284,9 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
     if (location == null) throw new InvalidUserDataException("Location for type ${type} now found in repository ${repositoryName}")
 
     String url = Eval.me('component', component, '"""' + location.'@url' + '"""')
-    if (!privateRepo) {
+    //if (!privateRepo) {
     logger.lifecycle("Getting ${compName} (type ${type}) from ${url} at ${branch} to ${targetDirPath}")
-    }
+    //}
 
     File targetDir = file(targetDirPath)
     if (targetDir.exists()) { logger.lifecycle("Component ${compName} already exists at ${targetDir}"); return targetDir }
@@ -1323,6 +1323,7 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
         delete file("${targetDirPath}/${archiveDirName}")
         }
     } else if (type == 'git') {
+        logger.lifecycle("Getting ${compName} (type ${type}) from ${url} at ${branch} to ${targetDirPath}")
         if (privateRepo) {
             providers.exec {
                 commandLine 'git', 'clone', '--branch', branch, url, targetDir.absolutePath
