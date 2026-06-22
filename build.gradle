@@ -1325,8 +1325,12 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
     } else if (type == 'git') {
         logger.lifecycle("Getting ${compName} (type ${type}) from ${url} at ${branch} to ${targetDirPath}")
         if (privateRepo) {
+            boolean shallowClone = project.hasProperty('shallowClone') && shallowClone == 'true'
+            def cloneArgs = ['git', 'clone']
+            if (shallowClone) cloneArgs += ['--depth', '1']
+            cloneArgs += ['--branch', branch, url, targetDir.absolutePath]
             providers.exec {
-                commandLine 'git', 'clone', '--branch', branch, url, targetDir.absolutePath
+                commandLine cloneArgs
             }.result.get().assertNormalExitValue()
         } else {
             Grgit.clone(dir: targetDir, uri: url, refToCheckout: branch)
