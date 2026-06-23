@@ -290,9 +290,10 @@ class EntityDataFeed {
         //     DataDocuments because we can't query it by entityName
         Map<String, ArrayList<DocumentEntityInfo>> localInfo = new HashMap<>()
 
+        logger.warn("=============11============")
         EntityList dataFeedAndDocumentList = efi.find("moqui.entity.feed.DataFeedAndDocument")
                 .condition("dataFeedTypeEnumId", "DTFDTP_RT_PUSH").useCache(true).disableAuthz().list()
-        //logger.warn("============= got dataFeedAndDocumentList: ${dataFeedAndDocumentList}")
+        logger.warn("============= got dataFeedAndDocumentList: ${dataFeedAndDocumentList}")
         Set<String> fullDataDocumentIdSet = new HashSet<String>()
         int dataFeedAndDocumentListSize = dataFeedAndDocumentList.size()
         for (int i = 0; i < dataFeedAndDocumentListSize; i++) {
@@ -752,9 +753,12 @@ class EntityDataFeed {
                         List<Map> documents = efi.getDataDocuments(dataDocumentId, condition, null, null)
 
                         if (documents) {
+                            logger.warn("=============333333============")
+                            logger.warn("=============3311133=====${dataDocumentId}=======")
                             EntityList dataFeedAndDocumentList = efi.find("moqui.entity.feed.DataFeedAndDocument")
                                     .condition("dataFeedTypeEnumId", "DTFDTP_RT_PUSH")
                                     .condition("dataDocumentId", dataDocumentId).useCache(true).list()
+                            logger.warn("=============4444444=====${dataFeedAndDocumentList}=======")
 
                             // logger.warn("=========== FEED document ${dataDocumentId}, documents ${documents.size()}, condition: ${condition}\n dataFeedAndDocumentList: ${dataFeedAndDocumentList.feedReceiveServiceName}")
 
