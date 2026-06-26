@@ -129,3 +129,12 @@ When a service job runs, it now puts `_jobRunId` into the service context before
 **Use cases:**
 - Services that create records (like `DataManagerLog`) can now read `_jobRunId` from context and save it. This lets you trace exactly which job run created a specific record
 - If something fails inside the service, `_jobRunId` can be included in error messages so you can directly look up the `ServiceJobRun` record for that run.
+
+-------------------------------------------------------------------------
+
+### [XaConnectionPollution.patch](./XaConnectionPollution.patch)
+Fixed XA connection pool pollution issue caused by closing connections early during commit and rollback.
+
+**Root Cause**: Connections were being closed and returned to the pool before the JTA transaction fully completed, leading to other concurrent threads getting `XAER_RMFAIL` errors when trying to enlist the same connection.
+**Fix**: Removed early `closeTxConnections()` calls inside both the commit and rollback methods. Connections are now safely closed in the `finally` block when the stack clean-up runs, ensuring physical connections are only released back to the pool once their transaction has fully ended.
+

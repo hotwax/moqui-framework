@@ -395,7 +395,6 @@ class TransactionFacadeImpl implements TransactionFacade {
             int status = ut.getStatus()
             // logger.warn("================ commit TX, currentStatus=${status}")
 
-            txStackInfo.closeTxConnections()
             if (status == Status.STATUS_MARKED_ROLLBACK) {
                 if (txStackInfo.rollbackOnlyInfo != null) {
                     logger.warn("Tried to commit transaction but marked rollback only, doing rollback instead; rollback-only was set here:", txStackInfo.rollbackOnlyInfo.rollbackLocation)
@@ -455,8 +454,6 @@ class TransactionFacadeImpl implements TransactionFacade {
         if (ut == null) throw new IllegalStateException("No transaction manager in place")
         TxStackInfo txStackInfo = getTxStackInfo()
         try {
-            txStackInfo.closeTxConnections()
-
             // logger.warn("================ rollback TX, currentStatus=${getStatus()}")
             if (getStatus() == Status.STATUS_NO_TRANSACTION) {
                 logger.warn("Transaction not rolled back, status is STATUS_NO_TRANSACTION")
