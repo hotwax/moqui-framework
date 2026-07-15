@@ -138,3 +138,10 @@ Fixed XA connection pool pollution issue caused by closing connections early dur
 **Root Cause**: Connections were being closed and returned to the pool before the JTA transaction fully completed, leading to other concurrent threads getting `XAER_RMFAIL` errors when trying to enlist the same connection.
 **Fix**: Removed early `closeTxConnections()` calls inside both the commit and rollback methods. Connections are now safely closed in the `finally` block when the stack clean-up runs, ensuring physical connections are only released back to the pool once their transaction has fully ended.
 
+-------------------------------------------------------------------------
+
+### [PageSizeDefault.patch](./PageSizeDefault.patch)
+Configured page size to default to Moqui configuration instead of User Preference.
+
+**Problem**: Saving `pageSize` as a user preference caused other screens and API calls to unexpectedly inherit it as their default.
+**Solution**: Removed logic that saves/loads `pageSize` from user preferences. Added a `webapp_screen_page_size` default property (set to `20`) as the fallback when no page size is provided. This fallback is applied to both web and non-web contexts using `SystemBinding`.
