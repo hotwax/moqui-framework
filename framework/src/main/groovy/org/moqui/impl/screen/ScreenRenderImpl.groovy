@@ -51,6 +51,7 @@ import org.moqui.util.ContextStack
 import org.moqui.util.MNode
 import org.moqui.util.ObjectUtilities
 import org.moqui.util.StringUtilities
+import org.moqui.util.SystemBinding
 import org.moqui.util.WebUtilities
 
 import org.slf4j.Logger
@@ -347,6 +348,7 @@ class ScreenRenderImpl implements ScreenRender {
             }
         }
 
+        String pageSize = null
         if (web != null) {
             // clear out the parameters used for special screen URL config
             if (web.requestParameters.lastStandalone) web.requestParameters.lastStandalone = ""
@@ -358,10 +360,13 @@ class ScreenRenderImpl implements ScreenRender {
             // add URL parameters, if there were any in the URL (in path info or after ?)
             screenUrlInstance.addParameters(web.requestParameters)
 
-            String pageSize = web.requestParameters.get("pageSize")
-            if(!pageSize) {
-                ec.contextStack.put("pageSize", System.getProperty("webapp_screen_page_size"))
-            }
+            pageSize = web.requestParameters.get("pageSize")
+        } else {
+            pageSize = ec.contextStack.getByString("pageSize")
+        }
+
+        if (!pageSize) {
+            ec.contextStack.put("pageSize", SystemBinding.getPropOrEnv("webapp_screen_page_size"))
         }
 
         // check webapp settings for each screen in the path
