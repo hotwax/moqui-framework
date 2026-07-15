@@ -1,0 +1,60 @@
+diff --git framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
+index 5551869a..e3a3af01 100644
+--- framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/screen/ScreenRenderImpl.groovy
+@@ -51,6 +51,7 @@ import org.moqui.util.ContextStack
+ import org.moqui.util.MNode
+ import org.moqui.util.ObjectUtilities
+ import org.moqui.util.StringUtilities
++import org.moqui.util.SystemBinding
+ import org.moqui.util.WebUtilities
+ 
+ import org.slf4j.Logger
+@@ -347,6 +348,7 @@ class ScreenRenderImpl implements ScreenRender {
+             }
+         }
+ 
++        String pageSize = null
+         if (web != null) {
+             // clear out the parameters used for special screen URL config
+             if (web.requestParameters.lastStandalone) web.requestParameters.lastStandalone = ""
+@@ -358,20 +360,13 @@ class ScreenRenderImpl implements ScreenRender {
+             // add URL parameters, if there were any in the URL (in path info or after ?)
+             screenUrlInstance.addParameters(web.requestParameters)
+ 
+-            // check for pageSize parameter, if set save in current user's preference, if not look up from user pref
+-            if (ec.userFacade.userId != null) {
+-                String pageSize = web.requestParameters.get("pageSize")
+-                String userPageSize = ec.userFacade.getPreference("screen.user.page.size")
+-                if (pageSize != null && pageSize.isInteger()) {
+-                    if (!pageSize.equals(userPageSize))
+-                        ec.userFacade.setPreference("screen.user.page.size", pageSize)
+-                } else {
+-                    if (userPageSize != null && userPageSize.isInteger()) {
+-                        // don't add to parameters, just set internally: web.requestParameters.put("pageSize", userPageSize)
+-                        ec.contextStack.put("pageSize", userPageSize)
+-                    }
+-                }
+-            }
++            pageSize = web.requestParameters.get("pageSize")
++        } else {
++            pageSize = ec.contextStack.getByString("pageSize")
++        }
++
++        if (!pageSize) {
++            ec.contextStack.put("pageSize", SystemBinding.getPropOrEnv("webapp_screen_page_size"))
+         }
+ 
+         // check webapp settings for each screen in the path
+diff --git framework/src/main/resources/MoquiDefaultConf.xml framework/src/main/resources/MoquiDefaultConf.xml
+index 64bca9c7..14632580 100644
+--- framework/src/main/resources/MoquiDefaultConf.xml
++++ framework/src/main/resources/MoquiDefaultConf.xml
+@@ -40,6 +40,7 @@
+         AWS Cloudfront: CloudFront-Viewer-Address (requires config in Cloudfront origin request policy)
+     -->
+     <default-property name="webapp_client_ip_header" value=""/>
++    <default-property name="webapp_screen_page_size" value="20"/>
+ 
+     <!-- Properties for the primary (transactional group) datasource -->
+     <default-property name="entity_ds_db_conf" value="h2"/>
