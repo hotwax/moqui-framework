@@ -39,8 +39,9 @@ import org.moqui.util.StringUtilities
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import jakarta.servlet.http.HttpServletRequest
+
 import javax.cache.Cache
-import javax.servlet.http.HttpServletRequest
 
 @CompileStatic
 class ScreenUrlInfo {
@@ -877,7 +878,7 @@ class ScreenUrlInfo {
         if (startsWithSlash && screenPath.startsWith("//")) {
             // find the screen by name
             String trimmedFromPath = screenPath.substring(2)
-            ArrayList<String> originalPathNameList = new ArrayList<String>(trimmedFromPath.split("/") as List)
+            ArrayList<String> originalPathNameList = new ArrayList<String>(Arrays.asList(trimmedFromPath.split("/")))
             originalPathNameList = cleanupPathNameList(originalPathNameList, inlineParameters)
 
             if (sfi.screenFindPathCache.containsKey(screenPath)) {

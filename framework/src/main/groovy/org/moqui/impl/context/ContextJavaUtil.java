@@ -38,8 +38,8 @@ import org.moqui.util.ObjectUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.transaction.Synchronization;
-import javax.transaction.Transaction;
+import jakarta.transaction.Synchronization;
+import jakarta.transaction.Transaction;
 import javax.transaction.xa.XAResource;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -268,7 +268,7 @@ public class ContextJavaUtil {
                 StringBuilder ps = new StringBuilder();
                 for (Map.Entry<String, Object> pme: parameters.entrySet()) {
                     Object value = pme.getValue();
-                    if (value == null || ObjectUtilities.isEmpty(value) || value instanceof Map || value instanceof Collection) continue;
+                    if (value == null || value instanceof Map || value instanceof Collection || ObjectUtilities.isEmpty(value)) continue;
                     String key = pme.getKey();
                     if (key != null && key.contains("password")) continue;
                     if (ps.length() > 0) ps.append(", ");
@@ -578,7 +578,9 @@ public class ContextJavaUtil {
 
 
     public final static ObjectMapper jacksonMapper = new ObjectMapper()
-            .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+            .setDefaultPropertyInclusion(JsonInclude.Value.construct(
+                        JsonInclude.Include.ALWAYS,
+                        JsonInclude.Include.ALWAYS))
             .enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).enable(SerializationFeature.INDENT_OUTPUT)
             .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
             .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, true);
@@ -669,7 +671,7 @@ public class ContextJavaUtil {
         @Override protected void afterExecute(Runnable runnable, Throwable throwable) {
             ExecutionContextImpl activeEc = ecfi.activeContext.get();
             if (activeEc != null) {
-                logger.warn("In WorkerThreadPoolExecutor.afterExecute() there is still an ExecutionContext for runnable " + runnable.getClass().getName() + " in thread (" + Thread.currentThread().getId() + ":" + Thread.currentThread().getName() + "), destroying");
+                logger.warn("In WorkerThreadPoolExecutor.afterExecute() there is still an ExecutionContext for runnable " + runnable.getClass().getName() + " in thread (" + Thread.currentThread().threadId() + ":" + Thread.currentThread().getName() + "), destroying");
                 try {
                     activeEc.destroy();
                 } catch (Throwable t) {

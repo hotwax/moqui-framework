@@ -413,7 +413,7 @@ class ScreenForm {
                     combinedOptionList.orderByFields(["sequenceNum"])
 
                     for (EntityValue optionValue in combinedOptionList) {
-                        if (optionValue.getEntityName() == "moqui.screen.form.DbFormFieldOption") {
+                        if (optionValue.resolveEntityName() == "moqui.screen.form.DbFormFieldOption") {
                             widgetNode.append("option", [key:(String) optionValue.keyValue, text:(String) optionValue.text])
                         } else {
                             MNode entityOptionsNode = widgetNode.append("entity-options", [text:((String) optionValue.text ?: "\${description}")])
@@ -701,7 +701,9 @@ class ScreenForm {
         EntityDefinition ed = ecfi.entityFacade.getEntityDefinition(entityName)
         // if more than 6 fields auto stack in columns
         int displayFieldNamesSize = displayFieldNames.size()
-        int fieldsPerCol = (displayFieldNamesSize / 6.0).setScale(0, BigDecimal.ROUND_HALF_UP).intValue()
+        // Disabled auto-stacking.
+        //int fieldsPerCol = (displayFieldNamesSize / 1).setScale(0, BigDecimal.ROUND_HALF_UP).intValue()
+        int fieldsPerCol = 1;
 
         ArrayList<String> idDateFields = new ArrayList<>()
         ArrayList<String> numberFields = new ArrayList<>()

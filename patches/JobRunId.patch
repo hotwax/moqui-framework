@@ -1,0 +1,14 @@
+diff --git framework/src/main/groovy/org/moqui/impl/service/ServiceCallJobImpl.groovy framework/src/main/groovy/org/moqui/impl/service/ServiceCallJobImpl.groovy
+old mode 100644
+new mode 100755
+index 8fa7c654..dde8d659
+--- framework/src/main/groovy/org/moqui/impl/service/ServiceCallJobImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/service/ServiceCallJobImpl.groovy
+@@ -237,6 +237,7 @@ class ServiceCallJobImpl extends ServiceCallImpl implements ServiceCallJob {
+                         .disableAuthz().call()
+ 
+                 if (lastRunTime != (Object) null) parameters.put("lastRunTime", lastRunTime)
++                if (jobRunId) parameters.put("_jobRunId", jobRunId)
+ 
+                 // NOTE: authz is disabled because authz is checked before queueing
+                 Map<String, Object> results = new HashMap<>()

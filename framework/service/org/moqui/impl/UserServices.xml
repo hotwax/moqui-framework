@@ -87,7 +87,7 @@ along with this software (see the LICENSE.md file). If not, see
             <service-call name="create#moqui.security.UserAccount" out-map="context" in-map="context"/>
             <service-call name="org.moqui.impl.UserServices.update#PasswordInternal" out-map="updateOut"
                 in-map="[userId:userId, newPassword:newPassword, newPasswordVerify:newPasswordVerify,
-                    requirePasswordChange:requirePasswordChange]"/>
+                    requirePasswordChange:requirePasswordChange,disabled:disabled]"/>
             <if condition="updateOut.updateSuccessful &amp;&amp; !ec.message.hasError()"><then>
                 <message public="true" type="success">Account created with username ${username}</message>
             </then><else-if condition="updateOut.passwordIssues">
@@ -211,14 +211,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <script>
                         def token = new org.apache.shiro.authc.UsernamePasswordToken((String) userAccount.username, (String) oldPassword)
                         def info = new org.apache.shiro.authc.SimpleAuthenticationInfo(userAccount.username, userAccount.currentPassword,
-                                userAccount.passwordSalt ? new org.apache.shiro.util.SimpleByteSource((String) userAccount.passwordSalt) : null, "moquiRealm")
+                                userAccount.passwordSalt ? new org.apache.shiro.lang.util.SimpleByteSource((String) userAccount.passwordSalt) : '', "moquiRealm")
                     </script>
                     <if condition="!userAccount.currentPassword || !ec.ecfi.getCredentialsMatcher(userAccount.passwordHashType, 'Y'.equals(userAccount.passwordBase64)).doCredentialsMatch(token, info)">
                         <if condition="userAccount.resetPassword"><then>
                             <!-- try the resetPassword -->
                             <script>
                                 info = new org.apache.shiro.authc.SimpleAuthenticationInfo(userAccount.username, userAccount.resetPassword,
-                                        userAccount.passwordSalt ? new org.apache.shiro.util.SimpleByteSource((String) userAccount.passwordSalt) : null, "moquiRealm")
+                                        userAccount.passwordSalt ? new org.apache.shiro.lang.util.SimpleByteSource((String) userAccount.passwordSalt) : '', "moquiRealm")
                             </script>
                             <if condition="!ec.ecfi.getCredentialsMatcher(userAccount.passwordHashType, 'Y'.equals(userAccount.passwordBase64)).doCredentialsMatch(token, info)">
                                 <return message="Password did not match current password or reset password for user ${username}" public="true" type="danger"/></if>
@@ -257,6 +257,7 @@ along with this software (see the LICENSE.md file). If not, see
             <parameter name="newPassword" required="true"/>
             <parameter name="newPasswordVerify" required="true"/>
             <parameter name="requirePasswordChange" default-value="N"/>
+            <parameter name="disabled" default-value="N"/>
         </in-parameters>
         <out-parameters>
             <parameter name="passwordIssues" type="Boolean"/>
@@ -347,7 +348,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-map field-name="passwordSetDate" from="ec.user.nowTimestamp"/>
                 <field-map field-name="requirePasswordChange"/>
                 <field-map field-name="resetPassword" from="null"/>
-                <field-map field-name="disabled" value="N"/>
+                <field-map field-name="disabled" from="disabled"/>
             </service-call>
             <set field="updateSuccessful" from="true"/>
         </actions>
