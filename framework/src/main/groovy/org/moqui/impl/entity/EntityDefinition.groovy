@@ -221,6 +221,7 @@ class EntityDefinition {
             if (internalEntityNode.attribute("no-update-stamp") != "true") {
                 // automatically add the lastUpdatedStamp field
                 internalEntityNode.append("field", [name:"lastUpdatedStamp", type:"date-time"])
+                addAutoFieldIndex("lastUpdatedStamp", "IDX_", "_UPDSTP")
             }
 
             ArrayList<MNode> fieldNodeList = internalEntityNode.children("field")
@@ -1210,5 +1211,19 @@ class EntityDefinition {
         EntityDefinition that = (EntityDefinition) o
         if (!this.fullEntityName.equals(that.fullEntityName)) return false
         return true
+    }
+
+    private void addAutoFieldIndex(String fieldName, String prefix, String suffix) {
+        boolean hasSingleIndex = internalEntityNode.children("index").any { MNode idx ->
+            ArrayList<MNode> idxFields = idx.children("index-field")
+            return idxFields.size() == 1 && fieldName.equals(idxFields.get(0).attribute("name"))
+        }
+        if (!hasSingleIndex) {
+            MNode databaseNode = efi.getDatabaseNode(groupName)
+            int clipLength = (databaseNode?.attribute("constraint-name-clip-length") ?: "30") as int
+            String entityName = internalEntityNode.attribute("entity-name")
+            String indexName = EntityDbMeta.makeAutoIndexName(entityName, prefix, suffix, clipLength)
+            internalEntityNode.append("index", [name: indexName]).append("index-field", [name: fieldName])
+        }
     }
 }
