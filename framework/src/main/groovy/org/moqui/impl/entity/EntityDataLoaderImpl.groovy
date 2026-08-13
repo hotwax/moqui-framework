@@ -268,6 +268,13 @@ class EntityDataLoaderImpl implements EntityDataLoader {
                 loadCompLocations = efi.ecfi.getComponentBaseLocations()
             }
 
+            // When dataTypes is specified, bucket data files by detected type so locationList is built
+            // in type-first order (all seed across components, then all seed-initial, etc.).
+            // Each entry is a map with keys location, filename, sequence; sorted by (sequence, filename) when appending.
+            // Files with no detectable type are added to locationList directly (load unconditionally).
+            LinkedHashMap<String, List<Map<String, String>>> typeLocationLists = dataTypes ?
+                    new LinkedHashMap<String, List<Map<String, String>>>() : (LinkedHashMap<String, List<Map<String, String>>>) null
+
             for (Map.Entry<String, String> compLocEntry in loadCompLocations) {
                 // if we're loading seed type data, add COMPONENT entity def files to the list of locations to load
                 if (!dataTypes || dataTypes.contains("seed")) {
