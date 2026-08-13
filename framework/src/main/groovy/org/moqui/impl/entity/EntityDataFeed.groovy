@@ -591,7 +591,11 @@ class EntityDataFeed {
                             aliasSet = true
                         }
                     }
-                    if (aliasSet) pkFieldAliasMap.put(pkFieldName, pkFieldName)
+                    // NOTE: only fall back to the raw field name when the DataDocument does NOT alias this PK
+                    //     field; the document's view entity exposes the alias, not the underlying field name, so
+                    //     overwriting a real alias here produces "field X does not exist in entity DataDocument.Y"
+                    //     and the real-time feed for that document silently never delivers
+                    if (!aliasSet) pkFieldAliasMap.put(pkFieldName, pkFieldName)
                 }
 
 
