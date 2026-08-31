@@ -69,4 +69,10 @@ along with this software (see the LICENSE.md file). If not, see
         <field name="intId" type="number-integer" is-pk="true"/>
         <field name="testMedium" type="text-medium"/>
     </entity>
+    <entity entity-name="TestServiceJobRunRef" package="moqui.test" sequence-bank-size="100">
+        <field name="testRefId" type="id" is-pk="true"/>
+        <field name="jobRunId" type="id"/>
+        <field name="testMedium" type="text-medium"/>
+        <relationship type="one" related="moqui.service.job.ServiceJobRun"/>
+    </entity>
 </entities>
