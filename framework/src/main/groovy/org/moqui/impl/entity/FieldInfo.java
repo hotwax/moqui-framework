@@ -13,7 +13,6 @@
  */
 package org.moqui.impl.entity;
 
-import co.hotwax.util.OmsEntityCrypto;
 import org.moqui.BaseArtifactException;
 import org.moqui.entity.EntityException;
 import org.moqui.impl.context.L10nFacadeImpl;
@@ -398,11 +397,7 @@ public class FieldInfo {
             if (typeValue != 1) throw new EntityException("The encrypt attribute was set to true on non-String field " + name + " of entity " + entityName);
             String original = value.toString();
             try {
-                try {
-                    value = EntityJavaUtil.enDeCrypt(original, false, efi);
-                } catch (Exception e) {
-                    value = OmsEntityCrypto.decrypt(efi.ecfi.getEci(), this.ed.getEntityName(), OmsEntityCrypto.EncryptMethod.TRUE, original);
-                }
+                value = EntityJavaUtil.enDeCrypt(original, false, efi);
             } catch (Exception e) {
                 logger.error("Error decrypting field [" + name + "] of entity [" + entityName + "]", e);
                 // NOTE DEJ 20200310 instead of using encrypted value return very clear fake placeholder; this is a bad design

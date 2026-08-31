@@ -221,7 +221,6 @@ class EntityDefinition {
             if (internalEntityNode.attribute("no-update-stamp") != "true") {
                 // automatically add the lastUpdatedStamp field
                 internalEntityNode.append("field", [name:"lastUpdatedStamp", type:"date-time"])
-                internalEntityNode.append("field", [name:"createdStamp", type:"date-time"])
             }
 
             ArrayList<MNode> fieldNodeList = internalEntityNode.children("field")
@@ -432,7 +431,6 @@ class EntityDefinition {
                 String aliasName = fi.name
                 // never auto-alias these
                 if ("lastUpdatedStamp".equals(aliasName)) continue
-                if ("createdStamp".equals(aliasName)) continue
                 // if specified as excluded, leave it out
                 ArrayList<MNode> excludeList = aliasAll.children("exclude")
                 int excludeListSize = excludeList.size()

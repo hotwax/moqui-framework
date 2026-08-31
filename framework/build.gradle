@@ -146,7 +146,6 @@ dependencies {
     implementation 'org.apache.logging.log4j:log4j-api:2.25.2'
     runtimeOnly 'org.apache.logging.log4j:log4j-jcl:2.25.2'
     runtimeOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.2'
-    api 'com.auth0:java-jwt:4.4.0'
 
     // SubEtha SMTP, depends on jakarta.mail-api which is provided
     api("com.github.davidmoten:subethasmtp:7.2.0") { transitive = false }

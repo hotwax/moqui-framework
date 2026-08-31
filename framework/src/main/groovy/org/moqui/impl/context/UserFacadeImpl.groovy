@@ -13,7 +13,6 @@
  */
 package org.moqui.impl.context
 
-import co.hotwax.auth.JWTManager
 import groovy.transform.CompileStatic
 import org.apache.shiro.authc.AuthenticationToken
 import org.apache.shiro.authc.ExpiredCredentialsException
@@ -174,13 +173,6 @@ class UserFacadeImpl implements UserFacade {
             if (loginKey != null && !loginKey.isEmpty() && !"null".equals(loginKey) && !"undefined".equals(loginKey))
                 this.loginUserKey(loginKey)
         }
-        if (currentInfo.username == null &&
-                ((authzHeader && authzHeader.startsWith("Bearer ")) || (eci.webImpl.getRequestParameters() && eci.webImpl.getRequestParameters().get("token")))) {
-            String jwtToken = getHeaderAuthBearerToken(authzHeader) ?: (eci.webImpl.getRequestParameters() ? eci.webImpl.getRequestParameters().get("token"):'');
-            jwtToken = jwtToken.trim()
-            if (jwtToken != null && !jwtToken.isEmpty() && !"null".equals(jwtToken) && !"undefined".equals(jwtToken))
-                this.loginJwtToken(jwtToken, eci)
-        }
         if (currentInfo.username == null && secureParameters.authUsername) {
             // try the Moqui-specific parameters for instant login
             // if we have credentials coming in anywhere other than URL parameters, try logging in
@@ -271,14 +263,6 @@ class UserFacadeImpl implements UserFacade {
                 }
             }
         }
-    }
-    String getHeaderAuthBearerToken(String authzHeader) {
-        String bearerPrefix = "Bearer ";
-        if (!authzHeader || !authzHeader.startsWith(bearerPrefix)) {
-            return null;
-        }
-        // remove prefix and any leading/trailing spaces and return the bare token
-        return authzHeader.replaceFirst(bearerPrefix, "").trim();
     }
     void initFromHandshakeRequest(HandshakeRequest request) {
         try {
@@ -768,20 +752,7 @@ class UserFacadeImpl implements UserFacade {
             session = request.getSession()
         }
     }
-    boolean loginJwtToken(String jwtToken, ExecutionContextImpl ec) {
-        Map jwtClaims = JWTManager.validateToken(jwtToken, ec);
-        if (jwtClaims != null && jwtClaims.userLoginId) {
-            String username = (String) jwtClaims.userLoginId;
-            EntityValue userLogin = eci.entity.find("org.apache.ofbiz.security.login.UserLogin").condition("userLoginId", username).disableAuthz().one()
-            if (userLogin != null && "Y".equals(userLogin.getNoCheckSimple("hasLoggedOut"))) {
-                eci.messageFacade.addError(eci.l10n.localize("User ${username} is currently active in this session but has logged out elsewhere, logging pout"))
-                logoutUser();
-            } else {
-                return internalLoginUser(username, false)
-            }
-        }
-        return false;
-    }
+
     @Override boolean loginUserKey(String loginKey) {
         if (!loginKey) {
             eci.message.addError(eci.l10n.localize("No login key specified"))

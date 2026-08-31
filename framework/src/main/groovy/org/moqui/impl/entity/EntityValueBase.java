@@ -982,7 +982,6 @@ public abstract class EntityValueBase implements EntityValue {
             for (String nonpkFieldName : this.getEntityDefinition().getNonPkFieldNames()) {
                 // skip the lastUpdatedStamp field
                 if ("lastUpdatedStamp".equals(nonpkFieldName)) continue;
-                if ("createdStamp".equals(nonpkFieldName)) continue;
 
                 final Object checkFieldValue = this.get(nonpkFieldName);
                 final Object dbFieldValue = dbValue.get(nonpkFieldName);
@@ -1036,7 +1035,6 @@ public abstract class EntityValueBase implements EntityValue {
             for (String nonpkFieldName : this.getEntityDefinition().getNonPkFieldNames()) {
                 // skip the lastUpdatedStamp field
                 if ("lastUpdatedStamp".equals(nonpkFieldName)) continue;
-                if ("createdStamp".equals(nonpkFieldName)) continue;
 
                 final Object checkFieldValue = this.get(nonpkFieldName);
                 final Object dbFieldValue = dbValue.get(nonpkFieldName);
@@ -1512,16 +1510,8 @@ public abstract class EntityValueBase implements EntityValue {
         final Long time = ecfi.transactionFacade.getCurrentTransactionStartTime();
         Long lastUpdatedLong = time != null && time > 0 ? time : System.currentTimeMillis();
         FieldInfo lastUpdatedStampInfo = ed.entityInfo.lastUpdatedStampInfo;
-        FieldInfo createdStampInfo = ed.entityInfo.createdStampInfo;
         if (lastUpdatedStampInfo != null && valueMapInternal.getByIString(lastUpdatedStampInfo.name, lastUpdatedStampInfo.index) == null)
             valueMapInternal.putByIString(lastUpdatedStampInfo.name, new Timestamp(lastUpdatedLong), lastUpdatedStampInfo.index);
-
-        if (createdStampInfo != null && valueMapInternal.getByIString(createdStampInfo.name, createdStampInfo.index) == null)
-            valueMapInternal.putByIString(createdStampInfo.name, new Timestamp(lastUpdatedLong), createdStampInfo.index);
-
-        FieldInfo lastUpdatedTxStampInfo = ed.getFieldInfo("lastUpdatedTxStamp");
-        if (lastUpdatedTxStampInfo != null && valueMapInternal.getByIString(lastUpdatedTxStampInfo.name, lastUpdatedTxStampInfo.index) == null)
-            valueMapInternal.putByIString(lastUpdatedTxStampInfo.name, new Timestamp(lastUpdatedLong), lastUpdatedTxStampInfo.index);
 
         // do the artifact push/authz
         ArtifactExecutionInfoImpl aei = new ArtifactExecutionInfoImpl(entityName, ArtifactExecutionInfo.AT_ENTITY, ArtifactExecutionInfo.AUTHZA_CREATE, "create").setParameters(valueMapInternal);
@@ -1637,7 +1627,6 @@ public abstract class EntityValueBase implements EntityValue {
             FieldInfo[] nonPkFieldArray = new FieldInfo[allNonPkFieldArray.length];
             ArrayList<String> changedCreateOnlyFields = null;
             boolean modifiedLastUpdatedStamp = false;
-            boolean modifiedLastUpdatedTxStamp = false;
             int size = allNonPkFieldArray.length;
             int nonPkFieldArrayIndex = 0;
             for (int i = 0; i < size; i++) {
@@ -1647,9 +1636,6 @@ public abstract class EntityValueBase implements EntityValue {
                         // more stringent is modified check for lastUpdatedStamp
                         if (dbValueMap == null || dbValueMap.getByIString(fieldInfo.name, fieldInfo.index) == null) continue;
                         modifiedLastUpdatedStamp = true;
-                    }
-                    if ("lastUpdatedTxStamp".equals(fieldInfo.name)) {
-                        modifiedLastUpdatedTxStamp = true;
                     }
                     nonPkFieldArray[nonPkFieldArrayIndex] = fieldInfo;
                     nonPkFieldArrayIndex++;
@@ -1683,19 +1669,9 @@ public abstract class EntityValueBase implements EntityValue {
             if (!modifiedLastUpdatedStamp && lastUpdatedStampInfo != null) {
                 final Long time = ecfi.transactionFacade.getCurrentTransactionStartTime();
                 long lastUpdatedLong = time != null && time > 0 ? time : System.currentTimeMillis();
-                Timestamp nowTs = new Timestamp(lastUpdatedLong);
-                valueMapInternal.putByIString(lastUpdatedStampInfo.name, nowTs, lastUpdatedStampInfo.index);
+                valueMapInternal.putByIString(lastUpdatedStampInfo.name, new Timestamp(lastUpdatedLong), lastUpdatedStampInfo.index);
                 nonPkFieldArray[nonPkFieldArrayIndex] = lastUpdatedStampInfo;
                 // never gets used after this point, but if ever does will need to: nonPkFieldArrayIndex++
-                nonPkFieldArrayIndex++;
-
-                FieldInfo lastUpdatedTxStampInfo = ed.getFieldInfo("lastUpdatedTxStamp");
-                if (lastUpdatedTxStampInfo != null) {
-                    valueMapInternal.putByIString(lastUpdatedTxStampInfo.name, nowTs, lastUpdatedTxStampInfo.index);
-                    if (!modifiedLastUpdatedTxStamp) {
-                        nonPkFieldArray[nonPkFieldArrayIndex] = lastUpdatedTxStampInfo;
-                    }
-                }
             }
 
             // do this before the db change so modified flag isn't cleared
