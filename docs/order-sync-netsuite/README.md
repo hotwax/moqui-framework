@@ -1,10 +1,13 @@
 # Order sync to NetSuite
 
-Three documents.
+Four documents.
 
 `what-order-create-does-today.md` lists everything the current CSV process does when
 it creates a sales order in NetSuite, in the order it happens, and what each piece
 means for the REST path.
+
+`the-rules-the-manager-writes.md` is the fulfillment manager's story: twelve wishes, in her
+words, and under each one the rows of data that fulfil it, until the rule set is complete.
 
 `test-scenarios.md` lists the rules a business user would program, what each must do, and
 what happened when all fourteen ran against a real hour of production orders.
