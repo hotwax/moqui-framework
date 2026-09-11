@@ -15,7 +15,8 @@ claim. Written 10 September 2026 from the code at gorjana-maarg `8dab480` on
 | Services | `G/service/co/hotwax/gorjana/netsuite/NetSuiteOrderServices.xml`, commit `8dab480` |
 | Account ids as data | `G/data/NetSuiteConfigData.xml` section 12, same commit |
 | Connector stubs | `C/service/co/hotwax/netsuite/NetSuiteRestServices.xml`, `create#NetSuiteSalesOrder` at `:477`, `create#NetSuiteCustomer` at `:670` |
-| PRs | hotwax/gorjana-maarg#333; hotwax/mantle-netsuite-connector#398 stacked on #389 |
+| PRs | hotwax/gorjana-maarg#333; hotwax/mantle-netsuite-connector#398 stacked on #389; #399 |
+| The plan and its status | hotwax/mantle-netsuite-connector#400, rewritten 11 Sep as the plan we would set out with, status dated |
 
 ## The rule chain
 

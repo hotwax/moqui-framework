@@ -4,8 +4,9 @@ This is the new order sync. It creates the sales order in NetSuite through the
 NetSuite REST record API and writes NetSuite's id back onto the order at once.
 No file, no SFTP, no NiFi.
 
-Built 10 September 2026. gorjana-maarg PR #333, on top of mantle-netsuite-connector
-PR #398 (the wire format) and the connector's order push services.
+Built 10 and 11 September 2026. The plan is issue hotwax/mantle-netsuite-connector#400. The
+code is gorjana-maarg PR #333, on top of mantle-netsuite-connector PR #398 (the wire format,
+on #389) and PR #399 (the order push).
 
 ## Two layers
 

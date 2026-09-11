@@ -13,3 +13,7 @@ sandbox.
 `record/` holds the same two documents with the file and line for every row, the
 field ids, the sandbox evidence, and the dates. Read it when you need to know where
 a rule lives or who proved what.
+
+The plan, as one page, is the GitHub issue hotwax/mantle-netsuite-connector#400. It lists the
+business process, the three parts of the build, the acceptance checks and the four pull
+requests, with a dated status at the end.
