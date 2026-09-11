@@ -135,6 +135,31 @@ run: "all we do is in production we set frequency so we are happy".
 
 | One row per order from the query: the select list is `orderId`, the sort fields and every alias of a sub-select member (read from the view's definition), so `DISTINCT` folds the ship group repeats; earlier rules' ids are `orderId not-in`; the set that dedup'd in the loop is gone; with a limit a page is exactly the orders still wanted | `9c30f60` | ten orders in pages of four, one row each (`SELECT DISTINCT OH.ORDER_ID, OH.PRIORITY, OH.ORDER_DATE, PAY.PAYMENT_TOTAL, UNMAP.UNMAPPED_ITEM_COUNT, XCM.WAITING_COUNT`); four ids passed as chosen left six with `NOT IN` in the SQL; limit 4 read one page of four; rules overlapping on M112950: rule 1 took it, rule 2 chose none |
 
+| The query as XML actions; the script only writes a page | `f393e7f`, `181aa98` | same counts |
+| Facts as anti-joins (`OrderUnmappedItemView`, `ExchangeCreditAwaitingMemoView`, non-lateral, no aggregate, merged by MySQL); the payment sum per order in `sync#NetSuiteOrder`; the service selects `orderId` alone | `885f85e`, `38d389e` | 76 eligible; M109534 "waits for payment: 49.5 of 51.98; nothing sent"; ten orders in files of 4, 3, 3 with `SELECT DISTINCT OH.ORDER_ID, OH.PRIORITY, OH.ORDER_DATE` |
+
+The framework rule learned on the way, 11 September: a sub-select member gives the outer
+query only what the caller selects; a view's own condition is not a request. So an
+aggregate cannot be a condition of a view. A lateral sub-select with no selected field renders
+`SELECT FROM`, a syntax error; a `having-econditions` helper joined by its key alone was pruned
+to `SELECT ORDER_ID FROM ORDER_HEADER`, no payments, no sum. Anti-joins on a join key work,
+because a non-lateral sub-select always exposes its join keys. The engine adds order-by fields
+to a distinct select itself (`EntityFindBase.groovy:1099`).
+
+### The full chain on the sandbox, 11 September 15:24 UTC
+
+`run#NetSuiteOrderPush` on `MDM_NS_SO_REST` (`DMC_ASYNC`, priority 7): rule 1 chose ten orders
+into three files (4, 3, 3), rule 2 none; `fromDate` set one minute out at 6.8 a minute. The
+runner started the three files at 15:25:11.763, .767 and .769 and finished them at 15:25:37
+to 15:25:47; 10 records, 0 failed. Sales orders 70687628, 70687629, 70687630, 70687631,
+70687632, 70687633, 70687727, 70687827, 70687828, 70687829; `NETSUITE_ORDER_ID` on all ten.
+Customers: M102679 → 25223917 and M102799 → 25422199 created; two others already in the
+sandbox, read back. AvaTax off, tax zero. Read back: 70687630 is `SO5727007`, 70687829 is
+`SO5727014`, form 163, location Ecomm, Standard, one line each, tag `pos-fulfilled`.
+Rate: about 3.5 seconds per order per file, three files, about 50 a minute from this machine.
+Log: four 400 lines from the "already exists" customers, logged by the framework for the
+stub's `ignore-error` call before the stub reads the answer; the record and MDM are clean.
+
 Why an order in two files would still be safe, Anil's question of 11 September: it never
 makes two NetSuite orders. After the
 first file, the second finds `NETSUITE_ORDER_ID` and skips; during it, the `orderId`

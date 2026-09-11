@@ -43,18 +43,18 @@ The two rules today:
 An order matched by both goes with the first.
 
 The view is `NetSuiteEligibleOrderView`. It answers the questions a rule cannot, because
-they need joins or counts, and every order must pass them:
+they need joins, and every order must pass them:
 
 1. It is a sales order with a Shopify order id and no NetSuite order id.
 2. Every item has a NetSuite product id.
-3. Its payments cover its total. Authorized plus settled payment rows, on every channel.
-   A zero-value order has no payment rows and nothing to cover.
-4. Every exchange credit on it reaches a NetSuite credit memo. The exchange credit payment
+3. Every exchange credit on it reaches a NetSuite credit memo. The exchange credit payment
    row names the customer return invoice it spends, and that invoice carries the memo id
    once NetSuite has made it. An exchange order is not sent before its memo exists.
 
-The payment rows say who pays for the order. An exchange order that is not yet linked to
-its return has no payment that covers it, or one with no invoice, and waits either way.
+The fourth question, do the payments cover the total, is a sum, and a sum cannot be a
+condition of a view. The per-order service asks it: authorized plus settled payment rows
+against the grand total, on every channel. An unpaid order is skipped with a message and
+offered again next run. A zero-value order has nothing to cover and goes.
 
 The bill-to customer no longer needs a NetSuite customer id. The old feed never saw
 such an order. The new path creates the customer first.
@@ -85,8 +85,9 @@ in production; the gap after the last file is at most that. A person who wants t
 job pauses it.
 
 `sync#NetSuiteOrder` does one order. If the order already has a NetSuite id it stops.
-If the bill-to customer has no NetSuite id it creates the customer. Then it creates
-the sales order and writes the NetSuite id onto the order.
+If its payments do not cover its total it stops with a message. If the bill-to customer
+has no NetSuite id it creates the customer. Then it creates the sales order and writes
+the NetSuite id onto the order.
 
 `create#NetSuiteCustomerFromParty` sends what the customer feed sends today. The
 Shopify customer id is the external id.
@@ -104,7 +105,8 @@ for one OMS order.
 
 The rule service reads only order ids from the view, one row per order, in pages, and
 stops as soon as the rule has what it wants. Orders an earlier rule of the same run took
-are left out by the database, not by the service.
+are left out by the database, not by the service. The query is built as XML actions of
+the service; only the writing of a page to the files is a script.
 
 A failed order goes to the MDM error file. The view still lists it, so the next run
 picks it up again.
@@ -134,6 +136,13 @@ per line, the line's item location, the gift card line's shipping method, and th
 phones. They are left out. The CSV import map inside NetSuite would settle them.
 
 ## Proved on the sandbox
+
+On 11 September the whole chain ran on ten local orders brokered to the warehouse. The
+rule group chose them into three files; the queue ran the three files together and
+finished in 36 seconds; ten sales orders were created in NetSuite, two customers were
+created and two found already there; every order got its NetSuite id at once. No
+errors. About 50 orders a minute across three files from this machine.
+
 
 Order M121345 went through. Its customer already existed, the id was read back, the
 sales order became 70687326 with every field as intended. A second run sent nothing.
