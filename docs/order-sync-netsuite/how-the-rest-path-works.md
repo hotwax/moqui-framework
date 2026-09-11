@@ -71,11 +71,18 @@ reads the rule's conditions from the database, applies them to the view through 
 engine, and writes the order ids to a CSV file logged against the MDM config
 `MDM_NS_SO_REST`. The MDM queue calls `sync#NetSuiteOrder` once per record.
 
+Each rule can carry two settings, as data on the rule: how many files its orders split
+into, and the most orders it queues in one run. The queue runs every file of a run at the
+same time, one order at a time inside each file. So three files are three orders in flight.
+Today rule 1 splits into three files with no limit; rule 2 into two files, at most 300 a
+run. Both numbers are placeholders to tune against what NetSuite accepts.
+
 The job paces itself. A run that finds a file still pending or running on the config writes
 nothing. A run that queued orders works out how long the queue needs, from the config's own
-history of finished files, and sets its own next run time to then. So the job's cron only
-says how often it looks. Set it to a minute or two in production; the gap after the last
-file is at most that. A person who wants to hold the job pauses it.
+history of finished files and the number of files running at once, and sets its own next
+run time to then. So the job's cron only says how often it looks. Set it to a minute or two
+in production; the gap after the last file is at most that. A person who wants to hold the
+job pauses it.
 
 `sync#NetSuiteOrder` does one order. If the order already has a NetSuite id it stops.
 If the bill-to customer has no NetSuite id it creates the customer. Then it creates

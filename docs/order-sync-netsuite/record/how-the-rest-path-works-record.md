@@ -125,10 +125,14 @@ run: "all we do is in production we set frequency so we are happy".
 | Self-pacing: rate = records over seconds on the last `historyLogCount` finished logs (`defaultRatePerMinute` 6 before history); minutes = queued ÷ (rate × files run at once) × (1 + `marginPercent` 20); `ServiceJob.fromDate` = now + minutes on `RuleGroup.jobName`; files at once = this run's files in `DMC_ASYNC`, 1 in `DMC_QUEUE` | same commit | 10 orders, one file, history 6/min: 2 minutes (3 before rounding to four places; `2.0000000000000004`); 11 orders, two files, `DMC_ASYNC`, history 7/min: 1 minute |
 | `fromDate` holds a job | framework `ScheduledJobRunner.groovy:115` to `:178` | one-minute cron: run 01:57:16, `fromDate` 02:00:19, no run 01:58 to 02:00, run 02:01:16 |
 
-Not built, by ruling: no event on file finish; the cron set tight per environment is enough.
-Not built yet: per-rule `RuleAction` limit and file count, `MDM_NS_SO_REST` to `DMC_ASYNC`,
-the evening job for POS. Anil has not ruled the starting rate, the file count, the evening
-hours, or whether rule 1 needs `statusId equals ORDER_APPROVED`.
+| Per-rule settings as `RuleAction` rows: `NSOP_ORDER_LIMIT` (most orders a run), `NSOP_FILE_COUNT` (files, dealt round robin); enumerations of type `NS_ORDER_PUSH_ACT_TYPE` | `C/data/OrderPushSeedData.xml`, `C/service/.../NetSuiteOrderPushServices.xml`, `C/script/.../OrderPushRuleFile.groovy`, `3ce32b8` | 10 orders, file count 3: files of 4, 3, 3, ten distinct; limit 4: 4 orders dealt 2, 1, 1; the limit is applied on distinct new orders as read, not as a SQL limit |
+| Rule 1 three files, no limit; rule 2 two files, limit 300 (placeholders); `MDM_NS_SO_REST` `DMC_ASYNC`, `priority` 7 | `G/data/NetSuiteConfigData.xml`, `1fc46b9` | on an async config the three logs started at 02:57:16.148, .153 and .156 and finished together |
+
+Not built, by ruling: no event on file finish; the cron set tight per environment is enough
+("all we do is in production we set frequency so we are happy"). Not built yet: the evening
+job for POS. Anil has not ruled the starting rate, the real file counts and limit, the
+evening hours, or whether rule 1 needs `statusId equals ORDER_APPROVED`. NetSuite's
+concurrency limit for the account, the ceiling on files in flight, is not known.
 
 Data model, said once: a POS item sits in a ship group at the store facility with shipping
 method `POS_COMPLETED`. Never look for a null ship group on an item.
