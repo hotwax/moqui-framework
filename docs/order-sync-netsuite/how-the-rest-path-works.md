@@ -119,6 +119,15 @@ the service; only the writing of a page to the files is a script.
 A failed order goes to the MDM error file. The view still lists it, so the next run
 picks it up again.
 
+## Taking an order back out
+
+A sales order can be deleted in NetSuite only while nothing has been made from it: no
+fulfillment, no invoice, no deposit, no return. After that NetSuite refuses and nothing
+changes. The connector's `delete#NetSuiteSalesOrder` does the delete and reports three
+outcomes: deleted, already gone, or refused with NetSuite's reason. The delete is
+permanent. On the OMS side the order's NetSuite id must be expired too, or the queue never
+offers the order again.
+
 ## What the order carries
 
 Standard fields: external id, customer, form, subsidiary, location, department,

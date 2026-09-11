@@ -167,6 +167,12 @@ Anil's ruling, 11 September: "for POS orders, I don't like having two jobs, we s
 smart about it. if my NS warehouse orders are going to keep the mdm busy then I will not
 pickup pos orders, but if there is room then I will." The evening job is off the list.
 
+| `delete#NetSuiteSalesOrder`: `DELETE record/v1/salesOrder/{id}`; 204 deleted; 404 `notFound` with a message, no error; a refusal is the error with NetSuite's reason | connector `0f19c4d` on #398 | 70687228 (`HCTEST-COUNTRY-B`, pending) deleted; again, 404; 70682121 (`SO5726970`, billed) refused: "This transaction cannot be deleted because it is linked to by one or more transactions", still there. What depends on an order: `select distinct tl.transaction, t.type, t.tranid from transactionline tl join transaction t on t.id = tl.transaction where tl.createdfrom = <id>`; for 70682121 a fulfillment, two deposits, an RMA and an invoice |
+
+Sandbox test records deleted on 11 September: 70687229 (`HCTEST-SVC-M-20260910`) by a probe
+call, 70687228 (`HCTEST-COUNTRY-B-20260910`) by the service. The other HCTEST/HCPROBE
+records and the ten orders of the morning run are still there.
+
 Why an order in two files would still be safe, Anil's question of 11 September: it never
 makes two NetSuite orders. After the
 first file, the second finds `NETSUITE_ORDER_ID` and skips; during it, the `orderId`
