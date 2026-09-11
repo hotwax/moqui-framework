@@ -39,9 +39,15 @@ The two rules today:
 1. Orders with a ship group at a facility in the `NETSUITE_FULFILLMENT` group, sorted by
    priority then order date. Which facilities are in the group is data; add a warehouse to
    the group and the rule follows.
-2. POS completed orders, with whatever capacity the first rule left, oldest first.
+2. POS completed orders, only with the room the first rule left, oldest first.
 
 An order matched by both goes with the first.
+
+"Room" is a number. The job says how long one run's list should keep the queue busy,
+ten minutes today. The run knows how fast the queue sends, from its own history. Rule 1
+takes every warehouse order; its orders cost minutes. Rule 2 may take only what is left
+of the ten minutes. On a busy day the warehouse fills the run and POS orders wait. On a
+quiet evening rule 1 takes seconds and POS orders fill the rest. One job does both.
 
 The view is `NetSuiteEligibleOrderView`. It answers the questions a rule cannot, because
 they need joins, and every order must pass them:
@@ -72,8 +78,9 @@ reads the rule's conditions from the database, applies them to the view through 
 engine, and writes the order ids to a CSV file logged against the MDM config
 `MDM_NS_SO_REST`. The MDM queue calls `sync#NetSuiteOrder` once per record.
 
-Each rule can carry two settings, as data on the rule: how many files its orders split
-into, and the most orders it queues in one run. The queue runs every file of a run at the
+Each rule can carry three settings, as data on the rule: how many files its orders split
+into, the most orders it queues in one run, and whether it takes only the room the rules
+before it left. The queue runs every file of a run at the
 same time, one order at a time inside each file. So three files are three orders in flight.
 Today rule 1 splits into three files with no limit; rule 2 into two files, at most 300 a
 run. Both numbers are placeholders to tune against what NetSuite accepts.

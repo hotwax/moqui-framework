@@ -161,6 +161,12 @@ Rate: about 3.5 seconds per order per file, three files, about 50 a minute from 
 Log: four 400 lines from the "already exists" customers, logged by the framework for the
 stub's `ignore-error` call before the stub reads the answer; the record and MDM are clean.
 
+| Spare capacity, one job: `targetMinutes` on the group service (job parameter, 10); the rate first, from history; each rule's orders add `orders ÷ (rate × files)` minutes; a rule with `NSOP_USE_SPARE_CAPACITY` gets `(targetMinutes − queued) × rate × its files` as a limit, its `NSOP_ORDER_LIMIT` still a ceiling, skipped with a message at zero; the wait after the run is the minutes queued plus the margin | connector `0073618`, gorjana `211b783` | at a 6 a minute history: target 10, warehouse rule 4 orders = 0.22 min, POS rule ran with 1; target 0.2, POS rule "skipped: the rules before it filled 0.2 minutes" |
+
+Anil's ruling, 11 September: "for POS orders, I don't like having two jobs, we should be
+smart about it. if my NS warehouse orders are going to keep the mdm busy then I will not
+pickup pos orders, but if there is room then I will." The evening job is off the list.
+
 Why an order in two files would still be safe, Anil's question of 11 September: it never
 makes two NetSuite orders. After the
 first file, the second finds `NETSUITE_ORDER_ID` and skips; during it, the `orderId`
