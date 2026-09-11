@@ -38,7 +38,8 @@ The two rules today:
 
 1. Orders with a ship group at a facility in the `NETSUITE_FULFILLMENT` group, sorted by
    priority then order date. Which facilities are in the group is data; add a warehouse to
-   the group and the rule follows.
+   the group and the rule follows. Counter sales at such a facility are not the warehouse's
+   work; the rule leaves them to rule 2.
 2. POS completed orders, only with the room the first rule left, oldest first.
 
 An order matched by both goes with the first.
@@ -80,8 +81,10 @@ engine, and writes the order ids to a CSV file logged against the MDM config
 
 Each rule can carry three settings, as data on the rule: how many files its orders split
 into, the most orders it queues in one run, and whether it takes only the room the rules
-before it left. The queue runs every file of a run at the
-same time, one order at a time inside each file. So three files are three orders in flight.
+before it left. The queue runs every file of a run at the same time, one order at a time
+inside each file. So three files are three orders in flight. "Room" counts the files that
+run at once: on a config that runs one file at a time, the same orders take three times
+the minutes.
 Today rule 1 splits into three files with no limit; rule 2 into two files, at most 300 a
 run. Both numbers are placeholders to tune against what NetSuite accepts.
 
@@ -123,10 +126,14 @@ picks it up again.
 
 A sales order can be deleted in NetSuite only while nothing has been made from it: no
 fulfillment, no invoice, no deposit, no return. After that NetSuite refuses and nothing
-changes. The connector's `delete#NetSuiteSalesOrder` does the delete and reports three
-outcomes: deleted, already gone, or refused with NetSuite's reason. The delete is
-permanent. On the OMS side the order's NetSuite id must be expired too, or the queue never
-offers the order again.
+changes. The connector's `delete#NetSuiteSalesOrder` looks first: it asks NetSuite which
+transactions were made from the order. Any found, it does not try the delete; it names
+them and stops. Only an order with nothing linked is deleted. Three outcomes: deleted,
+already gone, or linked. The delete is permanent. On the OMS side the order's NetSuite id
+must be expired too, or the queue never offers the order again.
+
+All fourteen rule scenarios in `test-scenarios.md` ran on 11 September against a real hour
+of production orders; every rule did what its rows say.
 
 ## What the order carries
 
