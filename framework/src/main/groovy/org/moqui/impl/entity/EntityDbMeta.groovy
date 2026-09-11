@@ -738,6 +738,23 @@ class EntityDbMeta {
         return indexName.toString()
     }
 
+    static String makeAutoIndexName(String entityName, String prefix, String suffix, int constraintNameClipLength) {
+        String pfx = prefix ?: "IDX_"
+        String sfx = suffix ?: ""
+        int clipLen = constraintNameClipLength > 0 ? constraintNameClipLength : 30
+
+        int maxTableLen = clipLen - (pfx.length() + sfx.length())
+        if (maxTableLen < 1) maxTableLen = 1
+
+        StringBuilder sb = new StringBuilder(EntityJavaUtil.camelCaseToUnderscored(entityName))
+        shrinkName(sb, maxTableLen)
+
+        sb.insert(0, pfx)
+        sb.append(sfx)
+        return sb.toString()
+    }
+
+
     int createIndexesForExistingTables() {
         int created = 0
         for (String en in efi.getAllEntityNames()) {
