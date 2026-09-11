@@ -128,7 +128,7 @@ defaultRatePerMinute 6` for a known rate.
 | 4c | target 3 | skipped, "filled 3 minutes" (28 orders one file at a time = 4.67 min) |
 | 4a | target 10 | 31 POS in 16, 15 (spare (10 − 4.67) × 6 = 32); with the probe's own history (145,000 a minute) all 92 |
 | 5 | rule 2 limit 30, 2 files | 30 in 15, 15; equal to the 30 oldest POS orders not in rule 1 |
-| 6 | Boulder M100010 added to the group | 31: the 28 + M121755, M121768 and POS sale M121727 at Boulder |
+| 6 | Boulder M100010 added to the group | 31: the 28 + M121755, M121768 and POS sale M121727 at Boulder. Anil: "yes" to `shipmentMethodTypeId not-equals POS_COMPLETED` on rule 1 (gorjana-maarg seed, 18:50 UTC). Run again: rule 1 30 (the 28 + M121755, M121768), M121727 with rule 2, mixed carts still rule 1, overlap 0 |
 | 7 | rule 3: method ≠ POS_COMPLETED, ≠ STOREPICKUP, shipGroupFacilityId in M100010, M100076, M100002 | 5: exactly the ship-from-store five; no pickup, no POS |
 | 8 | rules 1 and 2 active | mixed carts M121631 M121686 M121690 in rule 1's files, not in rule 2's; overlap 0; rule 2 chose 92 |
 | 9 | rule 1 + channel ≠ AFTSHP, rule 4 channel = AFTSHP | 25 + 3 (M121629 M121649 M121688); union exact |
@@ -148,7 +148,8 @@ Code finding: `run#NetSuiteOrderPush` with `historyLogCount` 0 failed
 
 ## Local state left behind
 
-Seeded rules restored (both active, cutover `2026-01-01T00:00:00`); the three extra rules
+Seeded rules restored (both active, cutover `2026-01-01T00:00:00`, rule 1 with the new
+`not-equals POS_COMPLETED` row); the three extra rules
 deleted; Boulder removed from the group; `PROBE_NS_SO_PUSH` logs all `DmlsFinished`;
 job `export_NetSuiteOrderPush_GORJANA` still paused, its `fromDate` at 18:36 UTC.
 The 176 orders, 37 products, 176 NetSuite product ids, three SHIPSI rows and the wider

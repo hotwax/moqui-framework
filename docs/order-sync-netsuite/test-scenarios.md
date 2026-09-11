@@ -34,7 +34,8 @@ Every run uses the no-op MDM config, so nothing reaches the sandbox.
 Each scenario names the rule rows a business user would write, then what must happen.
 
 1. Warehouse orders first. Rule: `facilityGroupId equals NETSUITE_FULFILLMENT`,
-   `orderDate greater-than 2026-09-01`, sort `priority, orderDate`, three files.
+   `orderDate greater-than 2026-09-01`, `shipmentMethodTypeId not-equals POS_COMPLETED`,
+   sort `priority, orderDate`, three files.
    Expect the 28 orders at WH and M100049, none from a store, spread over three files.
 2. Cutover date. Same rule with `orderDate greater-than 2026-01-01`.
    Expect the 15 older WH orders to join; with `2026-09-01` they are left out.
@@ -47,7 +48,8 @@ Each scenario names the rule rows a business user would write, then what must ha
 5. POS limit and file count. Rule 2 with limit 30 and two files.
    Expect exactly 30 POS orders, 15 in each file, the oldest first.
 6. A second warehouse joins the group. Add a store to `NETSUITE_FULFILLMENT`.
-   Expect that store's shipping orders picked by rule 1 with no rule change.
+   Expect that store's shipping orders picked by rule 1 with no rule change, and its
+   counter sales still with rule 2.
 7. Ship from store as a third rule. Rule 3: `shipmentMethodTypeId not-equals POS_COMPLETED`,
    `shipGroupFacilityId in <three store ids>`, after the POS rule.
    Expect those stores' shipping orders, and no pickup orders.
@@ -72,8 +74,10 @@ Each scenario names the rule rows a business user would write, then what must ha
 All fourteen ran on the local instance against the test bed above. Every rule did what its
 rows say. Three things are worth knowing:
 
-1. When a store joins `NETSUITE_FULFILLMENT` (scenario 6), its POS sales go through rule 1 too.
-   The rule reads "any order at a NetSuite facility", and a counter sale at that store is one.
+1. When a store joins `NETSUITE_FULFILLMENT` (scenario 6), its POS sales went through rule 1
+   too, because the rule read "any order at a NetSuite facility". Anil ruled no. Rule 1 now
+   carries `shipmentMethodTypeId not-equals POS_COMPLETED`; run again, the store's two shipping
+   orders went with rule 1 and its counter sale with rule 2. Mixed carts still go with rule 1.
 2. Spare capacity depends on how the MDM config runs files. With one file at a time
    (`DMC_QUEUE`), 28 warehouse orders at 6 a minute take 4.7 minutes, so a 10 minute target
    leaves room for 31 POS orders; with three files at once (`DMC_ASYNC`) it leaves room for all.
