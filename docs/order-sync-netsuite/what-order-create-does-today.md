@@ -110,24 +110,37 @@ Seventy steps, in six groups.
 
 ## E. Inside NetSuite
 
-60. A scheduled script reads the file and runs the CSV import, column by column.
-61. On save, a HotWax user event balances the order to the order total with a POS Tax
-    Variance line and handles gift card and POS exchange payments.
-62. On save, Avalara prices the tax.
-63. Several custom fields are filled by the import map or by account scripts. We do
-    not have the import map.
-64. A failed row is logged by a second script.
+Read on 11 September from the account's own deployment project on GitHub,
+`hotwax/hotwax-gorjana-netsuite`.
+
+60. A scheduled script downloads each file from SFTP and hands it to a saved CSV
+    import. It does nothing else. A twin script does the same for POS files.
+61. The saved import creates the order: form 154, status fixed to Pending Fulfillment,
+    a custom ship address, 31 header fields (20 custom), 15 line fields (8 custom), both
+    addresses. The POS import is the same map, plus the return channel, minus the kit
+    flag, the employee type and ship-to-store.
+62. On create, a HotWax user event adds lines until the order balances: a gift card
+    line, a store credit line, a POS tax variance line for the difference between the
+    HotWax total and NetSuite's total, and for a warranty exchange a warranty line for
+    the credit memo. Each line is not taxable. The variance line is skipped for warranty,
+    sellable and happiness-guarantee exchanges.
+63. On save, Avalara prices the tax.
+64. A file that fails is moved to a failed folder with a one-line error file.
 
 ## F. After the order exists
 
-65. A script exports the NetSuite id and the HotWax id to SFTP every 30 minutes.
+65. A script exports the NetSuite id and the HotWax id to SFTP every 30 minutes, for
+    orders created since its last run.
 66. NiFi reads that file and posts it to the old OFBiz importer, which writes the
     NetSuite id onto the OMS order. About 3,400 a day in production.
-67. Line ids come back the same way.
-68. A script creates the customer deposit for gift card and POS payments.
-69. Scripts create the invoice: one for web, one each for POS, exchange and gift card.
-70. Brokered items, fulfilled items and cancellations are separate feeds. Not part of
-    create.
+67. Line ids come back the same way. The order update feed later closes and changes
+    lines by those NetSuite line ids.
+68. A separate OMS feed writes a customer deposit file; a script creates the deposit on
+    the order, with the payment method, department and location.
+69. Six scripts create the invoice once the order is fulfilled and has a deposit: web,
+    POS, POS mixed cart, Loop exchange, AfterShip exchange, gift card.
+70. Brokered items, fulfilled items, order updates and cancellations are separate
+    feeds. Not part of create.
 
 ## What this means for the REST path
 
@@ -142,24 +155,30 @@ Belongs to a new caller in gorjana-maarg: all of A, B and C. That is about 60 ru
 and 34 of them live in the gorjana script today, not in the connector. Step 3 stops
 being a reason to skip and becomes a call to `create#NetSuiteCustomer` first.
 
-Falls away: 57 and 58, the files and SFTP. 60 and 64, the CSV import and its error
-log. 65 and 66, because the sales order service returns the NetSuite id at once and
-the caller writes it onto the order itself. That last one removes a 30-minute round
-trip through NiFi and OFBiz.
+Falls away: 57 and 58, the files and SFTP. 60, 61 and 64, the CSV import and its
+error folder. 65 and 66 for the order id, because the sales order service returns the
+NetSuite id at once and the caller writes it onto the order itself. That removes a
+30-minute round trip through NiFi and OFBiz.
 
-Stays as it is: 61, 62 and 63. They run on save whatever created the record. The
-variance line on our test order proved it.
+Stays as it is: 62 and 63. They run on create whatever made the record; the variance
+line on our test order proved it. 68 and 69 start from the id on the OMS order and
+the fulfilled status, and do not care how the order was created.
 
-## Three things we do not know yet
+Matches the import map already: every custom field the map sets, except the ship
+booklets flag `custbody39` and the line flag `custcol_nm_shopify_has_giftwrap`.
 
-The CSV import map inside NetSuite. It decides which column becomes which field, and
-it sets some fields no OMS code writes. Someone with NetSuite access needs to open
-the saved import and list it.
+## Three things to decide
 
-The HotWax user event on save. We know it balances to the order total and touches
-deposits. Nobody here has read it, and it decides what the caller must send for gift
-card and exchange orders.
+Line ids. The REST create answers with no body, so the OMS does not learn NetSuite's
+line ids. The update feed closes and changes lines by those ids. Either read the
+lines back after create, or keep the line export running.
 
-A released RESTlet in the account called "HC Create Customer and SO". Someone
-already built a customer-and-order creator inside NetSuite. We do not know who, when,
+The id export. It keeps running and re-sends ids the REST path already wrote. The old
+importer must accept a repeat; if it does, nothing to do.
+
+The form. The import map names form `custform_154_4054670_452`; our config sends
+form 163. The sandbox can say whether they are the same form.
+
+Still unknown: a released RESTlet in the account called "HC Create Customer and SO".
+Someone built a customer-and-order creator inside NetSuite. We do not know who, when,
 or whether anything calls it.

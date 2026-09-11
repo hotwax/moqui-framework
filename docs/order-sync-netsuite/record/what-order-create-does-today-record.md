@@ -115,22 +115,29 @@ Columns dropped before the CSV: `fieldsToRemove`, worker `:10`.
 ## E. Inside NetSuite
 
 Script deployments read from the sandbox `4054670-sb1` on 10 September through
-`probeSuiteQL`; the sandbox mirrors production.
+`probeSuiteQL`; the sandbox mirrors production. Source read 11 September from
+`hotwax/hotwax-gorjana-netsuite` (SDF project, `main` at `5da0f62`, 6 Sep 2026), paths
+under `src/`. `N/` is the SuiteScript module namespace.
 
-| # | Step | Script and deployment |
+| # | Step | Source |
 |---|---|---|
-| 60 | read the file, run the CSV import | `HC_importSalesOrders`, SCHEDULED |
-| 61 | on save: balance to `custbody_hc_order_total`, gift card and POS exchange payment | `HC_UE_GiftCardAndPOSExchangePayment`, USEREVENT on SALESORDER, RELEASED |
-| 62 | on save: price the tax | Avalara `AVA_TransactionTab_2` user event on SALESORDER; `custrecord_ava_deftaxcode = AVATAX+10214` |
-| 63 | `custbody4`, `custbody17 = 2`, `custbody23 = 218.0`, `custbody14_2 = email`, `custbody_promisedate`, `custbody_pickingcategory`, `custbody_esc_*` filled | read off CSV-created order 70680566 on 9 Sep; the import map is not available to us |
-| 64 | log a failed row | `HC_importSalesOrder_errorlog`, NOTSCHEDULED |
+| 60 | `sftp` list `/export/` (config in custom record `customrecord_ns_sftp_configuration`), download, `task.create({taskType: CSV_IMPORT, mappingId: 'custimport_add_salesorders_hc'})`, move to `/export/archive/`; POS: `/pos/`, `custimport_add_posorder_hc` | `FileCabinet/SuiteScripts/SalesOrder/HC_importSalesOrders.js` (163 lines), `HC_SC_ImportPOSOrder.js` |
+| 61 | saved CSV import: `datahandling ADD`, `transactionform custform_154_4054670_452`, `runserversuitescript T`, `validatemandatorycustfields T`, `ignorereadonly T`, `usemultithread T`, queue 3; fixed `ORDERSTATUS B`, `SHIPADDRESSLIST -2`; header columns → `custbody39, custbody4, custbody_hg_ship_to_store, custbody_hg_employee_type, custbody_celigo_etail_order_id, custbody_celigo_etail_parent_order_id, custbody_gift_wrap_option, custbody_hc_exchange_credit_memo_id, custbody_hc_exchange_from_warranty, custbody_hc_giftcard_payment, custbody_hc_has_customer_deposit, custbody_hc_order_id, custbody_hc_order_total, custbody_hc_order_with_kit, custbody_hc_pos_exc_payment, custbody_hc_sales_channel, custbody_hc_shopify_order_id, custbody_hc_storecredit_item, custbody_hc_storecredit_payment, custbody_shopify_source_name, DEPARTMENT, EMAIL, ENTITY, EXTERNALID, LOCATION, MEMO, OTHERREFNUM (orderId), SHIPMETHOD, SHIPPINGCOST, SHIPPINGTAXCODE, TRANDATE`; line columns → `custcol_custoption_text1, custcol_custoption_text1_font_family, custcol_hc_item_tag, custcol_hc_order_line_id, custcol_hc_orderline_type_id, custcol_nm_final_sale, custcol_nm_giftwarp_text, custcol_nm_shopify_has_giftwrap, ISCLOSED, ITEM, LOCATION, PRICE, QUANTITY, RATE, TAXCODE`; billing and shipping ADDR1, ADDR2, ADDRESSEE, ADDRPHONE, CITY, COUNTRY, STATE, ZIP. POS map: plus `custbody_hc_return_channel`, minus `custbody_hc_order_with_kit`, `custbody_hg_employee_type`, `custbody_hg_ship_to_store` | `Objects/SalesOrder/custimport_add_salesorders_hc.xml` (557 lines), `custimport_add_posorder_hc.xml` |
+| 62 | `afterSubmit` on `CREATE`: load the order; `offset = custbody_hc_order_total − total`; lines with `price -1`, `taxcode -7`: gift card item `22677` for `custbody_hc_giftcard_payment`; `custbody_hc_storecredit_item` for `custbody_hc_storecredit_payment`; Loop Exchange only, item `34837` negative `custbody_hc_pos_exc_payment`; variance item `34838` for the offset unless `custbody_hc_exchange_from_warranty` or `custbody_hc_return_channel` in SELLABLE_RETURN, HAPPINESS_GUARANTEE; warranty exchange: item `42102` for −(total + credit memo total) when `custbody_hc_exchange_credit_memo_id`; then save | `HC_UE_GiftCardAndPOSExchangePayment.js` (269 lines); deployment `customscript_hc_gcandposexpayment` |
+| 63 | Avalara `AVA_TransactionTab_2` user event on SALESORDER; `custrecord_ava_deftaxcode = AVATAX+10214` | account, not in the repo |
+| 64 | on exception: `/export/error/<date>-ErrorSaleOrder.csv` (`fileName,errorMessage`), file moved to `/export/failed/`; a failed import task only logs | `HC_importSalesOrders.js:118` to `:145` |
 
-Evidence for 61: sales order 70687229 (`SO5727002`), 10 September, created by
+Fields the CSV map sets that the REST payload (`G/service/co/hotwax/gorjana/netsuite/NetSuiteOrderServices.xml`)
+does not: `custbody39` (ship booklets), `custbody_hc_pos_exc_payment` (Loop only),
+`custcol_nm_shopify_has_giftwrap`. The payload sets `custbody_pickingcategory`,
+`custbody_pickinggiftwrapped`, `custbody_hc_exc_credit_amt` which the map does not.
+
+Evidence for 62: sales order 70687229 (`SO5727002`), 10 September, created by
 `create#NetSuiteSalesOrder` with `custbody_hc_order_total = 96.92` while NetSuite's
 own total was 90.00; the record came back with an extra line, "POS Tax Variance",
 6.92, Not Taxable.
 
-Evidence for 62: sales orders 70685728 and 70685729, 9 September, created over REST
+Evidence for 63: sales orders 70685728 and 70685729, 9 September, created over REST
 with no tax numbers; both came back `taxTotal 6.92`, line `taxRate1 8.88`,
 `custbody_avalara_status` Processed. Sixteen more on 10 September showed the line
 tax code is sourced from the item on every save and overrides whatever is sent.
@@ -139,12 +146,12 @@ tax code is sourced from the item on every save and overrides whatever is sent.
 
 | # | Step | Source |
 |---|---|---|
-| 65 | export NetSuite id plus HotWax id | `HC_MR_ExportedSalesOrderCSV`, MAPREDUCE, SCHEDULED |
+| 65 | map/reduce: orders with `datecreated` after `customrecord_hc_last_runtime_export.custrecord_salesorder_ex_date`, columns `internalid`, `custbody_hc_order_id`; CSV `<date>-SalesOrderExport.csv` to `/import/orderidentification/`; stamp updated | `HC_MR_ExportedSalesOrderCSV.js` (225 lines), search `customsearch_hc_export_salesorders` |
 | 66 | NiFi posts the file to OFBiz MDM `IMP_ORDER_IDENT`, service `createUpdateOrderIdentification` | production database 83: 3,504 `NETSUITE_ORDER_ID` rows on 9 Sep, arriving at :11 and :41 each hour |
-| 67 | line ids | `HC_MR_ExportedSalesOrderItemCSV`, SCHEDULED |
-| 68 | customer deposit | `HC_MR_CreateCustomerDeposit`, SCHEDULED |
-| 69 | invoices | `HC_SC_CreateSalesOrderInvoice`, `HC_SC_CreatePOSOrderInvoice`, `HC_SC_CreatePOSMixCartOrderInvoice`, `HC_SC_CreateExchangeSalesOrderInvoice`, `HC_SC_CreateGCSalesOrderInvoice`, all SCHEDULED |
-| 70 | later feeds | `generate_BrokeredOrderItemsFeed_Netsuite`, `generate_FulfilledOrderItemsFeed_Netsuite` live in production; the two cancellation feeds paused |
+| 67 | line ids the same way; consumed by the update import `custimport_update_salesorders_hc` (`ID`, `LINE`, `SHIPMETHOD`, `ISCLOSED`, `ITEM`, `LOCATION`, `QUANTITY`, `custcol_hc_item_tag`, ship address), script `HC_SC_UpdateSalesOrders.js` on `/update/` | `HC_MR_ExportedSalesOrderItemCSV.js`, `Objects/SalesOrder/custimport_update_salesorders_hc.xml` |
+| 68 | OMS `generate#CustomerDepositFeedV2` (connector `CustomerDepositServices.xml`, SystemMessageType `GenerateCustomerDepositFeed`) writes JSON to `/customerdeposit/`; NetSuite map/reduce reads one file a run, `record.create CUSTOMER_DEPOSIT` with `salesorder`, `payment`, `trandate` (the order's), `paymentmethod`, `department`, `location`, `custbody_celigo_etail_order_id`, `externalid "GR-" + external_id` | `HC_MR_CreateCustomerDeposit.js` (219 lines) |
+| 69 | saved searches on `SalesOrd` status `F` (Pending Billing) with a `CustDep` applied, per type; `record.transform SALES_ORDER → INVOICE`, `trandate`, `taxtotal`, `taxamountoverride`, deposit application | `HC_SC_CreateSalesOrderInvoice.js` (`customsearch_export_so_for_invoice`, "HC Auto Sales Order Bill"), `HC_SC_CreatePOSOrderInvoice.js`, `HC_SC_CreateExchangeSalesOrderInvoice.js` (Loop), `HC_SC_CreateAfterShipExcInvoice.js` (`customsearch_hc_auto_aftership_exchange`), `HC_SC_CreateGCSalesOrderInvoice.js`; saved search definitions are gzip+base64 in `Objects/SalesOrder/customsearch_*.xml` |
+| 70 | later feeds | `generate_BrokeredOrderItemsFeed_Netsuite`, `generate_FulfilledOrderItemsFeed_Netsuite` live in production; the two cancellation feeds paused; order updates through `/update/` |
 
 ## The REST path so far
 
@@ -157,9 +164,12 @@ branch `feat/sales-order-create-rest`, stacked on #389.
 
 ## Open items with no owner yet
 
-1. The NetSuite CSV import map for `HC_importSalesOrders`. Needed to confirm step 63.
-2. The source of `HC_UE_GiftCardAndPOSExchangePayment`. Not in any local checkout.
-3. "HC Create Customer and SO", RESTLET, RELEASED, and `HC_RL_ImportSalesOrder`,
-   RESTLET, TESTING. Both in the account. Origin unknown.
-4. The customer feed's field map is a Groovy file on the production server,
+1. Line ids for REST-created orders: read back after create (`GET record/v1/salesOrder/{id}/item`)
+   or keep `HC_MR_ExportedSalesOrderItemCSV` running. The update import needs them.
+2. `HC_MR_ExportedSalesOrderCSV` re-sends ids the REST path already wrote; the OFBiz
+   `createUpdateOrderIdentification` must accept a repeat.
+3. Form: map `custform_154_4054670_452` against config `salesOrderFormId 163`; check on the sandbox.
+4. "HC Create Customer and SO", RESTLET, RELEASED, and `HC_RL_ImportSalesOrder`,
+   RESTLET, TESTING. Both in the account, neither in the repo. Origin unknown.
+5. The customer feed's field map is a Groovy file on the production server,
    `runtime/datamanager/Netsuite/NetsuiteScript/SyncCustomerScript.groovy`. No local copy.
