@@ -128,6 +128,19 @@ run: "all we do is in production we set frequency so we are happy".
 | Per-rule settings as `RuleAction` rows: `NSOP_ORDER_LIMIT` (most orders a run), `NSOP_FILE_COUNT` (files, dealt round robin); enumerations of type `NS_ORDER_PUSH_ACT_TYPE` | `C/data/OrderPushSeedData.xml`, `C/service/.../NetSuiteOrderPushServices.xml`, `C/script/.../OrderPushRuleFile.groovy`, `3ce32b8` | 10 orders, file count 3: files of 4, 3, 3, ten distinct; limit 4: 4 orders dealt 2, 1, 1; the limit is applied on distinct new orders as read, not as a SQL limit |
 | Rule 1 three files, no limit; rule 2 two files, limit 300 (placeholders); `MDM_NS_SO_REST` `DMC_ASYNC`, `priority` 7 | `G/data/NetSuiteConfigData.xml`, `1fc46b9` | on an async config the three logs started at 02:57:16.148, .153 and .156 and finished together |
 
+| Rule conditions through `EntityFind.condition(field, operator, value)`; the engine splits a comma list for `in`, `not-in`, `between` (`FieldValueCondition.java:140`) | `C/script/.../OrderPushRuleFile.groovy`, `797af3a` | `salesChannelEnumId in POS_SALES_CHANNEL,CSR_SALES_CHANNEL` chose the ten POS orders; with web and CSR, none |
+| Paged read: with a limit, a page is twice the orders still wanted (at least 50); without, `batchSize` (default 500); `orderId` last in the sort | `dc45c16` | batch 4 read ten orders as `LIMIT 4 OFFSET 0, 4, 8`; limit 4 read one page of 50 |
+| `alreadyExists` on `create#NetSuiteSalesOrder` and `create#NetSuiteCustomer`: NetSuite's 400 "This entity already exists." is a message and a flag, no error | `C/service/co/hotwax/netsuite/NetSuiteRestServices.xml`, `ea70e82` on #398 | |
+| Callers read the flag, look the id up by `externalId` (`GET /record/v1/<type>/eid:<externalId>`), write it, one success message, no `ignore-error` | `G/service/.../NetSuiteOrderServices.xml`, `3cc0715` | M121117 with its id removed: "already in NetSuite as 70669247; recorded"; party M102520: "already in NetSuite as 25011665; recorded"; no "Ignoring error" in the log |
+
+Why the exclusion across rules is a set in the script and not a `not-in` in SQL, Anil's
+question of 11 September: an order in two files never makes two NetSuite orders. After the
+first file, the second finds `NETSUITE_ORDER_ID` and skips; during it, the `orderId`
+semaphore fails the second call, one error-file row that a retry turns into a skip; in the
+same instant, NetSuite refuses the second create by `externalId` and the id is read back.
+The exclusion saves a slot and keeps the error file clean; it is not what keeps NetSuite
+correct.
+
 Not built, by ruling: no event on file finish; the cron set tight per environment is enough
 ("all we do is in production we set frequency so we are happy"). Not built yet: the evening
 job for POS. Anil has not ruled the starting rate, the real file counts and limit, the

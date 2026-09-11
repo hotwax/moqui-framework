@@ -89,14 +89,21 @@ If the bill-to customer has no NetSuite id it creates the customer. Then it crea
 the sales order and writes the NetSuite id onto the order.
 
 `create#NetSuiteCustomerFromParty` sends what the customer feed sends today. The
-Shopify customer id is the external id. If NetSuite says the customer already
-exists, the service reads the id back by that external id and records it. So a lost
-answer on an earlier run cannot block the order.
+Shopify customer id is the external id.
 
 `create#NetSuiteSalesOrderFromOrder` builds the order. It reads the same views the
 feed reads, applies the same rules, and sends every custom field in one map keyed
-by NetSuite's own field id. If NetSuite says the order already exists, it reads the
-id back the same way.
+by NetSuite's own field id.
+
+If NetSuite answers that the customer or the order already exists, that is a success,
+not a failure. The goal is reached: the record is there. The connector reports it as a
+known outcome, the service reads the id back by the external id, writes it, and the
+record says "already in NetSuite as {id}; recorded". So a lost answer on an earlier run,
+or an order in two files by accident, costs nothing and NetSuite never gets two orders
+for one OMS order.
+
+The rule service reads only order ids from the view, in pages, and stops as soon as the
+rule has what it wants. Orders an earlier rule of the same run took are left out.
 
 A failed order goes to the MDM error file. The view still lists it, so the next run
 picks it up again.
