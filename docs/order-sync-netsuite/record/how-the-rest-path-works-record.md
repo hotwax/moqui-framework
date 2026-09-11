@@ -107,6 +107,48 @@ What still grows: the rows the range on `orderDate` covers, orders since the cut
 3,400 a day in production. Each costs two primary key lookups before the anti-join drops it. Move
 the rule's cutover forward now and then, or the scan is a year of orders every ten minutes.
 
+## The rules and the pacing, 10 September, late evening
+
+Rulings, Anil's words: "Number of orders we can push to NetSuite from OMS is bottleneck";
+warehouse orders "at priority and asap"; POS completed orders "are done deal"; "We don't want
+to push next list until the existing is done"; "the rule should be, get me all orders that
+are brokered to netsuite facility group, if I still have capacity left, then go get some pos
+fulfilled orders ... this should be simple"; on the gap between a file finishing and the next
+run: "all we do is in production we set frequency so we are happy".
+
+| Piece | Where | Proof |
+|---|---|---|
+| Ship group fields on the view: `shipGroupSeqId`, `shipmentMethodTypeId`, `shipGroupFacilityId`, `facilityGroupId` (via `FacilityGroupMember`, date filtered) | `G/entity/NetSuiteOrderViewEntities.xml`, `2f83de3` | rule 1 chose exactly the ten orders re-brokered to WH |
+| Rule 1 `NS_ORDER_PUSH_NS_FACILITY`: `facilityGroupId equals NETSUITE_FULFILLMENT`, sort `priority, orderDate`; rule 2 `NS_ORDER_PUSH_POS_COMPLETED`: `shipmentMethodTypeId equals POS_COMPLETED`, sort `orderDate` | `G/data/NetSuiteConfigData.xml` section 13, `2f83de3` | an order at a facility in the group that was also POS completed went with rule 1 and was not chosen by rule 2 |
+| Each order once per run: `chosenOrderIds` in and out of `run#NetSuiteOrderPushRule`, passed rule to rule | `C/service/.../NetSuiteOrderPushServices.xml`, `C/script/.../OrderPushRuleFile.groovy`, `4f371e2` | same run |
+| Idle check: skip while the config has a log in `DmlsPending, DmlsQueued, DmlsRunning` | `run#NetSuiteOrderPush`, `28b8f88` | a log marked running: run skipped, log count on the config unchanged at 17 |
+| Self-pacing: rate = records over seconds on the last `historyLogCount` finished logs (`defaultRatePerMinute` 6 before history); minutes = queued ÷ (rate × files run at once) × (1 + `marginPercent` 20); `ServiceJob.fromDate` = now + minutes on `RuleGroup.jobName`; files at once = this run's files in `DMC_ASYNC`, 1 in `DMC_QUEUE` | same commit | 10 orders, one file, history 6/min: 2 minutes (3 before rounding to four places; `2.0000000000000004`); 11 orders, two files, `DMC_ASYNC`, history 7/min: 1 minute |
+| `fromDate` holds a job | framework `ScheduledJobRunner.groovy:115` to `:178` | one-minute cron: run 01:57:16, `fromDate` 02:00:19, no run 01:58 to 02:00, run 02:01:16 |
+
+Not built, by ruling: no event on file finish; the cron set tight per environment is enough.
+Not built yet: per-rule `RuleAction` limit and file count, `MDM_NS_SO_REST` to `DMC_ASYNC`,
+the evening job for POS. Anil has not ruled the starting rate, the file count, the evening
+hours, or whether rule 1 needs `statusId equals ORDER_APPROVED`.
+
+Data model, said once: a POS item sits in a ship group at the store facility with shipping
+method `POS_COMPLETED`. Never look for a null ship group on an item.
+
+## What the dynamic view cannot do, measured 10 September
+
+Before the plain-join design, a dynamic view (`EntityDynamicView`) built as the rule is read
+was tried, with `probeDynamicView` in `G/service/probe/ProbeServices.xml` (local only):
+
+| Try | Result |
+|---|---|
+| `NetSuiteEligibleOrderView` as the first member | `Could not find field idValue in entity co.hotwax.oms.NetSuiteEligibleOrderView`; `EntityFindBuilder.java:439` says "currently unused" |
+| a helper view as a sub-select member, find condition `orderId is-null` on it | renders, but the condition is pushed into the sub-select (`EntityFindBuilder.java:625`): 9,171 rows where the truth is 130 |
+| find condition on any sub-select aggregate alias, static view included | `Invalid use of group function`; only the view's own `<entity-condition>` on it works |
+| plain entity member, `join-optional`, condition `not-equals POS_COMPLETED`, then `is-null` | correct anti-join, except `EntityDynamicViewImpl.groovy:75` to `:80` drops the operator when a value is given: rendered `= 'POS_COMPLETED'`, 9,143 rows where the truth is 28 |
+
+Local test state: `NETSUITE_FULFILLMENT` holds WH and M100049; ten eligible orders were
+re-brokered from store M100000 to WH (M118279, M118838, M118916, M119294, M119399, M119404,
+M119509, M119734, M121081, M121082); both rules' local cutover is `2026-01-01`.
+
 ## Picker rules to view conditions
 
 Ruled by Anil, 10 September, evening: the payment rows say who pays for the order; an

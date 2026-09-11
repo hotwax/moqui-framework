@@ -17,14 +17,33 @@ gorjana-maarg holds the rules. Three views pick the orders. Four services read t
 order, apply the rules the CSV feed and the gorjana script apply today, and call the
 connector.
 
+## The business problem the queue solves
+
+On a busy day gorjana takes orders faster than NetSuite accepts them. The backlog is normal.
+The queue has to choose which orders go first and how many at a time.
+
+Orders brokered to a facility that NetSuite's warehouse system runs go first, as soon as
+possible. The warehouse cannot pick what NetSuite does not have. POS completed orders are
+done deals; the customer has the goods. They can wait for quiet hours. One list at a time:
+the queue finishes the list it has before a new one is made, so no order lands in two files.
+
 ## Who chooses the orders
 
-A rule group, the same thing Rails uses. A person sets the rule conditions as data: from
-which date, which store, which channel. The system queries a view with those conditions and
-writes the chosen order ids to a file. A queue then sends them one at a time.
+A rule group, the same thing Rails uses. A person sets the rules as data. The system queries
+a view with each rule's conditions and writes the chosen order ids to a file. A queue then
+sends them one at a time.
+
+The two rules today:
+
+1. Orders with a ship group at a facility in the `NETSUITE_FULFILLMENT` group, sorted by
+   priority then order date. Which facilities are in the group is data; add a warehouse to
+   the group and the rule follows.
+2. POS completed orders, with whatever capacity the first rule left, oldest first.
+
+An order matched by both goes with the first.
 
 The view is `NetSuiteEligibleOrderView`. It answers the questions a rule cannot, because
-they need joins or counts:
+they need joins or counts, and every order must pass them:
 
 1. It is a sales order with a Shopify order id and no NetSuite order id.
 2. Every item has a NetSuite product id.
@@ -40,17 +59,23 @@ its return has no payment that covers it, or one with no invoice, and waits eith
 The bill-to customer no longer needs a NetSuite customer id. The old feed never saw
 such an order. The new path creates the customer first.
 
-A rule condition may name any field of the view: order date, entry date, status,
-priority, sales channel, store, grand total, payment total, party, Shopify order id,
-unmapped item count, exchange waiting count.
+A rule condition may name any plain field of the view: order date, entry date, status,
+priority, sales channel, store, grand total, party, Shopify order id, the ship group's
+shipping method, facility and facility group. The three counts the view computes are its
+own conditions and cannot be rule conditions.
 
 ## The chain
 
-A job runs the rule group every ten minutes. For each active rule, the connector's
-`run#NetSuiteOrderPushRule` reads the rule's conditions from the database, applies them
-to the view through the entity engine, and writes the order ids to a CSV file logged
-against the MDM config `MDM_NS_SO_REST`. The MDM queue calls `sync#NetSuiteOrder` once
-per record.
+A job runs the rule group. For each active rule, the connector's `run#NetSuiteOrderPushRule`
+reads the rule's conditions from the database, applies them to the view through the entity
+engine, and writes the order ids to a CSV file logged against the MDM config
+`MDM_NS_SO_REST`. The MDM queue calls `sync#NetSuiteOrder` once per record.
+
+The job paces itself. A run that finds a file still pending or running on the config writes
+nothing. A run that queued orders works out how long the queue needs, from the config's own
+history of finished files, and sets its own next run time to then. So the job's cron only
+says how often it looks. Set it to a minute or two in production; the gap after the last
+file is at most that. A person who wants to hold the job pauses it.
 
 `sync#NetSuiteOrder` does one order. If the order already has a NetSuite id it stops.
 If the bill-to customer has no NetSuite id it creates the customer. Then it creates
