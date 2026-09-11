@@ -17,24 +17,125 @@ claim. Written 10 September 2026 from the code at gorjana-maarg `8dab480` on
 | Connector stubs | `C/service/co/hotwax/netsuite/NetSuiteRestServices.xml`, `create#NetSuiteSalesOrder` at `:477`, `create#NetSuiteCustomer` at `:670` |
 | PRs | hotwax/gorjana-maarg#333; hotwax/mantle-netsuite-connector#398 stacked on #389 |
 
+## The rule chain
+
+Added 10 September, evening, after the ruling to use the Rails rule layer.
+
+| Piece | Where |
+|---|---|
+| Connector view `NetSuiteOrderPushEligible`, the template's fixed part as entities, and its helper `NetSuiteOrderPushShipGroupSummary` | `C/entity/NetSuiteOrderPushViewEntities.xml` |
+| `run#NetSuiteOrderPush` (rule group walk) and `run#NetSuiteOrderPushRule` (one rule) | `C/service/co/hotwax/netsuite/NetSuiteOrderPushServices.xml` |
+| The query: rule conditions to entity conditions, CSV out | `C/script/co/hotwax/netsuite/order/OrderPushRuleFile.groovy` |
+| Rule group `NS_ORDER_PUSH_GORJANA`, rule `NS_ORDER_PUSH_RULE_GORJANA`, MDM config `MDM_NS_SO_REST`, job `export_NetSuiteOrderPush_GORJANA` (paused) | `G/data/NetSuiteConfigData.xml` section 13 |
+
+The operator text of a rule condition goes through `EntityConditionFactoryImpl.getComparisonOperator`,
+the same call `MaargUtil.makeSqlWhere` uses at `maarg-util/src/main/groovy/co/hotwax/util/MaargUtil.groovy:203`;
+`in`, `not-in`, `between`, `not-between` values through `MaargUtil.valueToCollection`. Every alias is
+selected and the find is distinct: a sub-select member's columns exist in the query only when
+selected, and the view's own conditions name `PAY.paymentTotal` (measured: `Unknown column
+'PAY.PAYMENT_TOTAL'` when only `orderId` was selected).
+
+The old pair, `run#NetSuiteDMOrderFeed` and `run#NetSuiteOrderFeedRule` in `C/service/co/hotwax/netsuite/OrderServices.xml:508`
+and `:559`, and `C/sql/EligibleOrdersQuery.sql.ftl`, are untouched. Rails' four jobs still name them.
+
+### Old template against the new default view, local, 10 September
+
+Same rule (`orderDate greater-than 2026-01-01T00:00:00`), same store, both services run one after the
+other. Old: 3,643 ids. New: 3,642. Difference: M121345, in the old set only. Its `NETSUITE_ORDER_ID`
+row has `from_date 2026-09-10 20:34:47` (UTC, as Moqui stores it); the template compares it to the
+database's `now()`, which was `2026-09-10 16:57:51` in the server's CDT, so the row was "not yet
+effective" and the order was chosen again. The view's `<date-filter/>` compares in one clock. A
+database running in UTC does not show this; the local one runs in CDT.
+
+The old service also wrote its file to `runtime://datamanager/null/ExportOrderFeed_null.csv`: its
+`${exportPath}` and `${dateTime}` are expanded by the `<set value=...>` before the writer sees them,
+and neither is in the context. Not fixed; the old code is not touched.
+
+### The chain end to end, local against the sandbox, 10 September 22:00 UTC
+
+Rule cutover set to `2026-08-15T00:00:00` on the local row so one order qualifies. `run#NetSuiteOrderPush`
+chose M121117, logged `M100260` on `MDM_NS_SO_REST`; the MDM runner picked it up at 22:00:16 and finished
+at 22:00:24, 1 record, 0 failed. `sync#NetSuiteOrder` got 400 "already exists" from NetSuite: sales
+order `SO_6955978129452` was made there on 18 August by the sandbox instance's CSV feed (OMS order
+M149172 on that instance). The id 70669247 was read back by external id and written onto M121117.
+A second run of the group chose 0 orders and logged nothing.
+
+A rule naming a field the view lacks: `Field noSuchField not found on entity
+co.hotwax.netsuite.order.NetSuiteOrderPushEligible, cannot add condition`, no file written.
+
+`sync#EligibleNetSuiteOrders` was deleted; the rule group and the queue take its place.
+
+## The query, checked for the database
+
+Captured from MySQL's general log on 10 September after the rework, saved next to this file as
+`eligible-order-query.sql` (gorjana view) and `default-push-query.sql` (connector view). `EXPLAIN`
+on the local database, 9,234 orders:
+
+| Table | Access | Index |
+|---|---|---|
+| `ORDER_HEADER` | range on the rule's `orderDate`, when the account has an ORDER_DATE index; gorjana production has `idx_order_header_order_date` | |
+| `ORDER_IDENTIFICATION` (Shopify id, NetSuite id) | one primary key lookup each, "Not exists" for the NetSuite id | `PRIMARY (type, order_id, from_date)` |
+| `ORDER_ROLE` | primary key prefix | `PRIMARY (order_id, ...)` |
+| lateral `ORDER_ITEM` + `GOOD_IDENTIFICATION` | primary key prefix, primary key | |
+| lateral `ORDER_PAYMENT_PREFERENCE` + `INVOICE` (exchange credits) | ref, primary key | the local plan shows a scan on `INVOICE` because the table has 55 rows; the join is on its primary key |
+| lateral `ORDER_PAYMENT_PREFERENCE` | ref | `MANUAL_REF_NUM_IDX (order_id, ...)` |
+| connector view lateral `ORDER_ITEM_SHIP_GROUP` + `ORDER_ITEM` + `CARRIER_SHIPMENT_METHOD` | primary keys | |
+
+What changed for this, and why:
+
+- The three helper views join lateral (`sub-select="true"`, `LEFT OUTER JOIN LATERAL` on mysql8).
+  Non-lateral, each was a derived table over its whole base table on every run: a `SUM` over all
+  2,024,732 payment rows, a scan of all 4,295,534 order items, the ship group summary over
+  4,410,154 groups. Lateral, each runs only for the orders that survive the NetSuite-id anti-join.
+- Each helper is a count or a sum. A lateral that only says "a row exists" cannot be written: the
+  framework moves the join key into the correlated WHERE and has nothing left to select
+  (measured: `SELECT FROM ORDER_HEADER ...`, a syntax error). So `OrderUnmappedItemCountView` and
+  `ExchangeCreditAwaitingMemoView` answer a count, and the picker admits the order at zero. The
+  connector's `InvalidOrders` is no longer a member; its question is asked per order instead.
+- The framework joins a member only when one of its fields is used. Two joins had been dropped
+  silently: the cancelled-return test in the exchange helper, and the order-item join in the ship
+  group summary (`itemCount` now keeps it, and the view requires it above zero).
+- Aliases inside the helpers are prefixed (`XRIR`, `UOI`) so a correlated WHERE inside a lateral
+  cannot resolve to the outer view's alias of the same name.
+- Indexes: `NetSuiteReturnHeaderHistory.returnId` is declared in the connector's new entity file;
+  the entity had only its primary key and the return lifecycle reads it by return. The picker no
+  longer reads it. `ORDER_HEADER.ORDER_DATE` is not declared, because gorjana production already
+  carries `idx_order_header_order_date` under its own name and a declared one would be created
+  beside it.
+
+What still grows: the rows the range on `orderDate` covers, orders since the cutover, about
+3,400 a day in production. Each costs two primary key lookups before the anti-join drops it. Move
+the rule's cutover forward now and then, or the scan is a year of orders every ten minutes.
+
 ## Picker rules to view conditions
+
+Ruled by Anil, 10 September, evening: the payment rows say who pays for the order; an
+exchange order is not sent until its credit memo exists; a zero-value order has no payment
+row. All of #305 and the PRs beside it count as merged.
 
 | Feed step | View | Condition |
 |---|---|---|
 | 1, 2, 4 | `NetSuiteEligibleOrderView` | `orderTypeId = SALES_ORDER`, `SHOPIFY_OID.idValue` not null, `OID(NETSUITE_ORDER_ID).orderId` null |
 | 3 | removed | no `NETSUITE_CUSTOMER_ID` join; `sync#NetSuiteOrder` creates the customer |
-| 5 | `NetSuiteEligibleOrderView` | `INVORD.orderId` null, the connector's `InvalidOrders` sub-select |
-| 8 | `posOnly` alias | case on a sub-select counting ship groups with a method other than `POS_COMPLETED` = 0 |
-| 10 | `NetSuiteEligibleOrderView` | `salesChannelEnumId != AFTSHP_SALES_CHANNEL or RH.returnId not null` |
-| 11 | `ExchangeAwaitingCreditMemoView` | `ReturnItemResponse.replacementOrderId` not null, `ReturnHeader.statusId != RETURN_CANCELLED`, `NetSuiteReturnHeaderHistory.creditMemoId` null |
-| 13 | `OrderValidPaymentTotalView` | sum of `OrderPaymentPreference.maxAmount` in `PAYMENT_AUTHORIZED, PAYMENT_SETTLED`; the main view requires `paymentTotal >= grandTotal` on POS orders |
+| 5 | `OrderUnmappedItemCountView`, lateral | `unmappedItemCount = 0`: order items with no active `NETSUITE_PRODUCT_ID` |
+| 8 | removed | the two-job split existed only to run the payment check later |
+| 10 | removed | folded into 11 and 13. Also dead in production: the script compares the channel description to `"Aftership Sales Channel"`, small s, and both AfterShip enumerations say `"AfterShip Sales Channel"`. Groovy compares exactly. |
+| 11 | `ExchangeCreditAwaitingMemoView`, lateral | `exchangeWaitingCount = 0`: live `EXCHANGE_CREDIT` preferences (authorized or settled) whose `customerReturnInvoiceId` is empty or names an `Invoice` with no `externalId`. The memo id lives on the customer return invoice's `externalId` under #305; `OrderPaymentPreference.customerReturnInvoiceId` is the oms component's field from commit `5d8c4318`, 7 September. `NetSuiteReturnHeaderHistory` is not read. |
+| 13 | `OrderValidPaymentTotalView`, lateral | `paymentTotal >= grandTotal or grandTotal = 0`, on every channel, not POS only. Production, one week to 10 September: paid in full on every channel; the shortfalls were 26 POS orders and 36 unlinked AfterShip exchanges. |
 
-Steps 6, 7 and 9 (sync history, date window, 1000 cap) are the batch's `limit`
-parameter and nothing else. Both date properties are empty in production.
+Steps 6, 7 and 9 (sync history, date window, 1000 cap) are the rule's own conditions and
+nothing else. Both date properties are empty in production.
 
-Local proof, 10 September: 79 eligible rows; 37 of them have no NetSuite customer id;
-rules 10, 11 and 13 leak 0 rows. `posOnly = Y` proved on M112950 with one temporary
-`NetSuiteReturnHeaderHistory` row carrying a credit memo id, then removed.
+Local proof, 10 September, after the rework: 74 eligible. Against the previous rule set,
+76: the two out are web orders paid 49.50 of 51.98, which the old POS-only rule let
+through. Two POS orders with a refunded `EXCHANGE_CREDIT` row were held until the helper
+was limited to live preferences; both are original orders, no return behind them.
+M112950, an exchange order, entered the picker when its `EXCHANGE_CREDIT` preference was
+pointed at a temporary invoice carrying an `externalId`, and left it when the `externalId`
+was cleared; the fixture was removed after.
+
+The payload reads the memo id the same way: the order's `EXCHANGE_CREDIT` preferences by
+id, the first with a `customerReturnInvoiceId`, that invoice's `externalId`.
 
 ## Header mapping, feed step to NetSuite field
 
