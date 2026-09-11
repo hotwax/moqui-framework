@@ -133,8 +133,10 @@ run: "all we do is in production we set frequency so we are happy".
 | `alreadyExists` on `create#NetSuiteSalesOrder` and `create#NetSuiteCustomer`: NetSuite's 400 "This entity already exists." is a message and a flag, no error | `C/service/co/hotwax/netsuite/NetSuiteRestServices.xml`, `ea70e82` on #398 | |
 | Callers read the flag, look the id up by `externalId` (`GET /record/v1/<type>/eid:<externalId>`), write it, one success message, no `ignore-error` | `G/service/.../NetSuiteOrderServices.xml`, `3cc0715` | M121117 with its id removed: "already in NetSuite as 70669247; recorded"; party M102520: "already in NetSuite as 25011665; recorded"; no "Ignoring error" in the log |
 
-Why the exclusion across rules is a set in the script and not a `not-in` in SQL, Anil's
-question of 11 September: an order in two files never makes two NetSuite orders. After the
+| One row per order from the query: the select list is `orderId`, the sort fields and every alias of a sub-select member (read from the view's definition), so `DISTINCT` folds the ship group repeats; earlier rules' ids are `orderId not-in`; the set that dedup'd in the loop is gone; with a limit a page is exactly the orders still wanted | `9c30f60` | ten orders in pages of four, one row each (`SELECT DISTINCT OH.ORDER_ID, OH.PRIORITY, OH.ORDER_DATE, PAY.PAYMENT_TOTAL, UNMAP.UNMAPPED_ITEM_COUNT, XCM.WAITING_COUNT`); four ids passed as chosen left six with `NOT IN` in the SQL; limit 4 read one page of four; rules overlapping on M112950: rule 1 took it, rule 2 chose none |
+
+Why an order in two files would still be safe, Anil's question of 11 September: it never
+makes two NetSuite orders. After the
 first file, the second finds `NETSUITE_ORDER_ID` and skips; during it, the `orderId`
 semaphore fails the second call, one error-file row that a retry turns into a skip; in the
 same instant, NetSuite refuses the second create by `externalId` and the id is read back.

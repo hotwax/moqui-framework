@@ -102,8 +102,9 @@ record says "already in NetSuite as {id}; recorded". So a lost answer on an earl
 or an order in two files by accident, costs nothing and NetSuite never gets two orders
 for one OMS order.
 
-The rule service reads only order ids from the view, in pages, and stops as soon as the
-rule has what it wants. Orders an earlier rule of the same run took are left out.
+The rule service reads only order ids from the view, one row per order, in pages, and
+stops as soon as the rule has what it wants. Orders an earlier rule of the same run took
+are left out by the database, not by the service.
 
 A failed order goes to the MDM error file. The view still lists it, so the next run
 picks it up again.
