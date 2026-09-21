@@ -1357,8 +1357,6 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
                             if (entry.isDirectory()) {
                                 destFile.mkdirs()
                             } else {
-                                File parent = destFile.getParentFile()
-                                if (parent != null && !parent.exists()) parent.mkdirs()
                                 try (OutputStream os = new FileOutputStream(destFile)) {
                                 ObjectUtilities.copyStream(zipIn, os)
                                 }
