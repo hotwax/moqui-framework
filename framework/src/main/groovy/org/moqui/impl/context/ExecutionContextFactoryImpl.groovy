@@ -1338,20 +1338,28 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
                     // NOTE: could use getPath() instead of toExternalForm().substring(5) for file specific URLs, will work on Windows?
                     String zipPath = zipRr.getUrl().toExternalForm().substring(5)
                     File zipFile = new File(zipPath)
-                    String targetDirLocation = zipFile.getParent()
-                    logger.info("Expanding component archive ${zipRr.getFileName()} to ${targetDirLocation}")
+                    File targetDir = zipFile.getParentFile()
+                    String targetDirCanonical = targetDir.getCanonicalPath()
+                    logger.info("Expanding component archive ${zipRr.getFileName()} to ${targetDirCanonical}")
 
                     try (ZipInputStream zipIn = new ZipInputStream(zipRr.openStream())) {
                         ZipEntry entry = zipIn.getNextEntry()
                         // iterates over entries in the zip file
                         while (entry != null) {
-                            ResourceReference entryRr = getResourceReference(targetDirLocation + '/' + entry.getName())
-                            String filePath = entryRr.getUrl().toExternalForm().substring(5)
+                            // guard against Zip Slip (entry names with .. or absolute paths)
+                            File destFile = new File(targetDir, entry.getName())
+                            String destCanonical = destFile.getCanonicalPath()
+                            if (!destCanonical.equals(targetDirCanonical) &&
+                                    !destCanonical.startsWith(targetDirCanonical + File.separator)) {
+                                throw new IllegalArgumentException(
+                                        "Zip entry '${entry.getName()}' in ${zipRr.getFileName()} would extract outside target directory ${targetDirCanonical}")
+                            }
                             if (entry.isDirectory()) {
-                                File dir = new File(filePath)
-                                dir.mkdir()
+                                destFile.mkdirs()
                             } else {
-                                try (OutputStream os = new FileOutputStream(filePath)) {
+                                File parent = destFile.getParentFile()
+                                if (parent != null && !parent.exists()) parent.mkdirs()
+                                try (OutputStream os = new FileOutputStream(destFile)) {
                                 ObjectUtilities.copyStream(zipIn, os)
                                 }
                             }
