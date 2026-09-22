@@ -1,0 +1,82 @@
+diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+index 885ef991..c89aa706 100644
+--- framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
++++ framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+@@ -45,11 +45,24 @@ class EntityDbMeta {
+     protected HashMap<String, Boolean> entityTablesExist = new HashMap<>()
+ 
+     protected HashMap<String, Boolean> runtimeAddMissingMap = new HashMap<>()
++    protected HashMap<String, Boolean> addMissingColumnsMap = new HashMap<>()
+ 
+     protected EntityFacadeImpl efi
+ 
+     EntityDbMeta(EntityFacadeImpl efi) { this.efi = efi }
+ 
++    private boolean isAddMissingColumns(String groupName) {
++        Boolean result = (Boolean) addMissingColumnsMap.get(groupName)
++        if (result == null) {
++            MNode datasourceNode = efi.getDatasourceNode(groupName)
++            MNode dbNode = efi.getDatabaseNode(groupName)
++            String amcAttr = datasourceNode?.attribute("add-missing-columns")
++            result = amcAttr ? !"false".equals(amcAttr) : !"false".equals(dbNode?.attribute("default-add-missing-columns"))
++            addMissingColumnsMap.put(groupName, result)
++        }
++        return result.booleanValue()
++    }
++
+     static boolean shouldCreateFks(ExecutionContextFactoryImpl ecfi) {
+         if (ecfi.getEci().artifactExecutionFacade.entityFkCreateDisabled()) return false
+         if ("true".equals(SystemBinding.getPropOrEnv("entity_disable_fk_create"))) return false
+@@ -141,6 +154,7 @@ class EntityDbMeta {
+                     throw new EntityException("Exception getting columns in group ${groupName}", e)
+                 }
+ 
++                boolean addMissingColumns = isAddMissingColumns(groupName)
+                 Set<String> remainingTableNames = new HashSet<>(existingTableNames)
+                 for (String entityName in groupEntityNames) {
+                     EntityDefinition ed = efi.getEntityDefinition(entityName)
+@@ -164,8 +178,10 @@ class EntityDbMeta {
+                                     if (existingColumns.contains(fi.columnName) || existingColumns.contains(fi.columnName.toLowerCase())) {
+                                         remainingColumns.remove(fi.columnName)
+                                         remainingColumns.remove(fi.columnName.toLowerCase())
+-                                    } else {
++                                    } else if (addMissingColumns) {
+                                         addColumn(ed, fi, con)
++                                    } else {
++                                        logger.warn("Table ${tableName} (${fullEntityName}) is missing column ${fi.columnName}, add-missing-columns is disabled")
+                                     }
+                                 }
+                                 if (remainingColumns.size() > 0)
+@@ -381,7 +397,13 @@ class EntityDbMeta {
+             // table exists, see if it is missing any columns
+             ArrayList<FieldInfo> mcs = getMissingColumns(ed)
+             int mcsSize = mcs.size()
+-            for (int i = 0; i < mcsSize; i++) addColumn(ed, (FieldInfo) mcs.get(i), null)
++            if (mcsSize > 0) {
++                if (isAddMissingColumns(ed.getEntityGroupName())) {
++                    for (int i = 0; i < mcsSize; i++) addColumn(ed, (FieldInfo) mcs.get(i), null)
++                } else {
++                    logger.warn("Table ${ed.getTableName()} (${ed.getFullEntityName()}) has ${mcsSize} missing column(s), add-missing-columns is disabled")
++                }
++            }
+             // create foreign keys after checking each to see if it already exists
+             if (startup) {
+                 createForeignKeys(ed, true, null, null)
+@@ -453,9 +475,14 @@ class EntityDbMeta {
+ 
+         if (dbResult && !ed.isViewEntity) {
+             // on the first check also make sure all columns/etc exist; we'll do this even on read/exist check otherwise query will blow up when doesn't exist
+-            ArrayList<FieldInfo> mcs = getMissingColumns(ed)
+-            int mcsSize = mcs.size()
+-            for (int i = 0; i < mcsSize; i++) addColumn(ed, (FieldInfo) mcs.get(i), null)
++            if (isAddMissingColumns(ed.getEntityGroupName())) {
++                ArrayList<FieldInfo> mcs = getMissingColumns(ed)
++                int mcsSize = mcs.size()
++                for (int i = 0; i < mcsSize; i++) addColumn(ed, (FieldInfo) mcs.get(i), null)
++            } else {
++                ArrayList<FieldInfo> mcs = getMissingColumns(ed)
++                if (mcs.size() > 0) logger.warn("Table ${ed.getTableName()} (${ed.getFullEntityName()}) has ${mcs.size()} missing column(s), add-missing-columns is disabled")
++            }
+         }
+         // don't remember the result for view-entities, get if from member-entities... if we remember it we have to set
+         //     it for all view-entities when a member-entity is created
