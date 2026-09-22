@@ -614,6 +614,24 @@ class EntityDbMeta {
         }
     }
 
+    String getAddColumnSql(EntityDefinition ed, FieldInfo fi) {
+        if (ed == null) throw new IllegalArgumentException("No EntityDefinition specified, cannot build add-column SQL")
+        if (ed.isViewEntity) throw new IllegalArgumentException("Cannot build add-column SQL for a view entity")
+
+        String groupName = ed.getEntityGroupName()
+        MNode databaseNode = efi.getDatabaseNode(groupName)
+        String sqlType = efi.getFieldSqlType(fi.fieldNode.attribute("type"), ed)
+        String javaType = efi.getFieldJavaType(fi.fieldNode.attribute("type"), ed)
+
+        StringBuilder sql = new StringBuilder("ALTER TABLE ").append(ed.getFullTableName())
+        sql.append(" ADD ").append(fi.columnName).append(" ").append(sqlType)
+        if ("String" == javaType || "java.lang.String" == javaType) {
+            if (databaseNode.attribute("character-set")) sql.append(" CHARACTER SET ").append(databaseNode.attribute("character-set"))
+            if (databaseNode.attribute("collate")) sql.append(" COLLATE ").append(databaseNode.attribute("collate"))
+        }
+        return sql.toString()
+    }
+
     void addColumn(EntityDefinition ed, FieldInfo fi, Connection sharedCon) {
         if (ed == null) throw new IllegalArgumentException("No EntityDefinition specified, cannot add column")
         if (ed.isViewEntity) throw new IllegalArgumentException("Cannot add column for a view entity")

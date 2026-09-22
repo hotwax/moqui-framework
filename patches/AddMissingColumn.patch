@@ -1,7 +1,7 @@
-diff --git framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
-index 885ef991..c89aa706 100644
---- framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
-+++ framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+diff --git a/framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy b/framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
+index 885ef991..54f44af4 100644
+--- a/framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
++++ b/framework/src/main/groovy/org/moqui/impl/entity/EntityDbMeta.groovy
 @@ -45,11 +45,24 @@ class EntityDbMeta {
      protected HashMap<String, Boolean> entityTablesExist = new HashMap<>()
  
@@ -80,3 +80,28 @@ index 885ef991..c89aa706 100644
          }
          // don't remember the result for view-entities, get if from member-entities... if we remember it we have to set
          //     it for all view-entities when a member-entity is created
+@@ -587,6 +614,24 @@ class EntityDbMeta {
+         }
+     }
+ 
++    String getAddColumnSql(EntityDefinition ed, FieldInfo fi) {
++        if (ed == null) throw new IllegalArgumentException("No EntityDefinition specified, cannot build add-column SQL")
++        if (ed.isViewEntity) throw new IllegalArgumentException("Cannot build add-column SQL for a view entity")
++
++        String groupName = ed.getEntityGroupName()
++        MNode databaseNode = efi.getDatabaseNode(groupName)
++        String sqlType = efi.getFieldSqlType(fi.fieldNode.attribute("type"), ed)
++        String javaType = efi.getFieldJavaType(fi.fieldNode.attribute("type"), ed)
++
++        StringBuilder sql = new StringBuilder("ALTER TABLE ").append(ed.getFullTableName())
++        sql.append(" ADD ").append(fi.columnName).append(" ").append(sqlType)
++        if ("String" == javaType || "java.lang.String" == javaType) {
++            if (databaseNode.attribute("character-set")) sql.append(" CHARACTER SET ").append(databaseNode.attribute("character-set"))
++            if (databaseNode.attribute("collate")) sql.append(" COLLATE ").append(databaseNode.attribute("collate"))
++        }
++        return sql.toString()
++    }
++
+     void addColumn(EntityDefinition ed, FieldInfo fi, Connection sharedCon) {
+         if (ed == null) throw new IllegalArgumentException("No EntityDefinition specified, cannot add column")
+         if (ed.isViewEntity) throw new IllegalArgumentException("Cannot add column for a view entity")
