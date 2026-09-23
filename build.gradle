@@ -39,6 +39,13 @@ allprojects {
     }
 }
 
+subprojects {
+    tasks.withType(GroovyCompile).configureEach {
+        groovyOptions.fork = true
+        groovyOptions.forkOptions.memoryMaximumSize = '1g'
+    }
+}
+
 import groovy.util.Node
 import groovy.xml.XmlParser
 import groovy.xml.XmlSlurper
