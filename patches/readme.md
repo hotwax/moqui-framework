@@ -145,3 +145,20 @@ Configured page size to default to Moqui configuration instead of User Preferenc
 
 **Problem**: Saving `pageSize` as a user preference caused other screens and API calls to unexpectedly inherit it as their default.
 **Solution**: Removed logic that saves/loads `pageSize` from user preferences. Added a `webapp_screen_page_size` default property (set to `20`) as the fallback when no page size is provided. This fallback is applied to both web and non-web contexts using `SystemBinding`.
+
+-------------------------------------------------------------------------
+
+### [EntityAutoFieldsAndIndex.patch](./EntityAutoFieldsAndIndex.patch)
+Added automatic `createdStamp` field injection and automatic database index generation for timestamp fields (`lastUpdatedStamp` and `createdStamp`).
+
+- **Automatic `createdStamp` field**: Injects `createdStamp` date-time field into entities (unless `no-update-stamp="true"` is set) and sets the creation timestamp on entity create.
+- **Automatic database indexes**: Automatically creates a single-field database index for `lastUpdatedStamp` (`IDX_<ENTITY>_UPDSTP`) and `createdStamp` (`IDX_<ENTITY>_CRTSTP`) if a single-field index does not already exist on the entity.
+- **Constraint clip length**: Truncates generated index names to fit within database constraint name clip lengths (`constraint-name-clip-length`).
+- **Forms and Views**: Excludes `createdStamp` from auto-aliasing in view-entities and handles timestamp fields in screen forms.
+
+**Benefit**: Improves query performance for timestamp-based filtering and sync queries without needing manual index definitions on entities.
+
+#### References:
+- PR: [#54](https://github.com/hotwax/moqui-framework/pull/54)
+- Issue: [hotwax-maarg-util#202](https://github.com/hotwax/hotwax-maarg-util/issues/202)
+

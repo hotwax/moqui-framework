@@ -491,7 +491,7 @@ class ScreenForm {
         outNode.attributes.remove("multi")
         for (int i = 0; i < outNode.children.size(); ) {
             MNode fn = outNode.children.get(i)
-            if (fn.attribute("name") in ["aen", "den", "lastUpdatedStamp"]) {
+            if (fn.attribute("name") in ["aen", "den", "lastUpdatedStamp", "lastUpdatedTxStamp"]) {
                 outNode.children.remove(i)
             } else {
                 for (MNode subFn in fn.getChildren()) {
@@ -549,7 +549,7 @@ class ScreenForm {
         switch (fieldType) {
             case "edit":
                 // lastUpdatedStamp is always hidden for edit (needed for optimistic lock)
-                if (parameterNode.attribute("name") == "lastUpdatedStamp") {
+                if (parameterNode.attribute("name") in ["lastUpdatedStamp", "lastUpdatedTxStamp"]) {
                     subFieldNode.append("hidden", null)
                     break
                 }
@@ -632,7 +632,7 @@ class ScreenForm {
 
         for (MNode parameterNode in parameterNodes) {
             String parameterName = parameterNode.attribute("name")
-            if ((excludes != null && excludes.contains(parameterName)) || "lastUpdatedStamp".equals(parameterName)) continue
+            if ((excludes != null && excludes.contains(parameterName)) || "lastUpdatedStamp".equals(parameterName) || "lastUpdatedTxStamp".equals(parameterName)) continue
             MNode newFieldNode = new MNode("field", [name:parameterName])
             MNode subFieldNode = newFieldNode.append("default-field", ["validate-service":sd.serviceName, "validate-parameter":parameterName])
             addAutoServiceField(nounEd, parameterNode, fieldType, serviceVerb, newFieldNode, subFieldNode, baseFormNode)
@@ -647,7 +647,7 @@ class ScreenForm {
         ArrayList<String> displayFieldNames = new ArrayList<>(fieldNamesSize)
         for (int i = 0; i < fieldNamesSize; i++) {
             String fieldName = (String) fieldNames.get(i)
-            if ((excludes != null && excludes.contains(fieldName)) || "lastUpdatedStamp".equals(fieldName)) continue
+            if ((excludes != null && excludes.contains(fieldName)) || "lastUpdatedStamp".equals(fieldName) || "lastUpdatedTxStamp".equals(fieldName)) continue
 
             FieldInfo fi = ed.getFieldInfo(fieldName)
             String efType = fi.type ?: "text-long"
@@ -799,7 +799,7 @@ class ScreenForm {
         switch (fieldType) {
         case "edit":
             // lastUpdatedStamp is always hidden for edit (needed for optimistic lock)
-            if (fieldName == "lastUpdatedStamp") {
+            if (fieldName in ["lastUpdatedStamp", "lastUpdatedTxStamp"]) {
                 subFieldNode.append("hidden", null)
                 break
             }

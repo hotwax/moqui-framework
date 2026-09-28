@@ -276,6 +276,7 @@ public class EntityJavaUtil {
 
         public final FieldInfo[] pkFieldInfoArray, nonPkFieldInfoArray, allFieldInfoArray;
         final FieldInfo lastUpdatedStampInfo;
+        final FieldInfo createdStampInfo;
         public final String allFieldsSqlSelect;
         final Map<String, String> pkFieldDefaults, nonPkFieldDefaults;
 
@@ -363,6 +364,7 @@ public class EntityJavaUtil {
             Map<String, String> pkFieldDefaultsTemp = new HashMap<>();
             Map<String, String> nonPkFieldDefaultsTemp = new HashMap<>();
             FieldInfo lastUpdatedTemp = null;
+            FieldInfo createdStampTemp = null;
             for (int i = 0; i < allFieldInfoSize; i++) {
                 FieldInfo fi = allFieldInfoList.get(i);
                 allFieldInfoArray[i] = fi;
@@ -386,6 +388,7 @@ public class EntityJavaUtil {
                     else nonPkFieldDefaultsTemp.put(fi.name, defaultStr);
                 }
                 if ("lastUpdatedStamp".equals(fi.name)) lastUpdatedTemp = fi;
+                if ("createdStamp".equals(fi.name)) createdStampTemp = fi;
             }
             createOnlyFields = createOnlyFieldsTemp;
             needsAuditLog = needsAuditLogTemp;
@@ -395,6 +398,7 @@ public class EntityJavaUtil {
             pkFieldDefaults = pkFieldDefaultsTemp.size() > 0 ? pkFieldDefaultsTemp : null;
             nonPkFieldDefaults = nonPkFieldDefaultsTemp.size() > 0 ? nonPkFieldDefaultsTemp : null;
             lastUpdatedStampInfo = lastUpdatedTemp;
+            createdStampInfo = createdStampTemp;
 
             pkFieldInfoArray = new FieldInfo[pkFieldInfoList.size()];
             pkFieldInfoList.toArray(pkFieldInfoArray);
