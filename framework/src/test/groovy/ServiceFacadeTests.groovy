@@ -19,6 +19,7 @@ import spock.lang.*
 
 import org.moqui.context.ExecutionContext
 import org.moqui.Moqui
+import java.sql.Timestamp
 
 class ServiceFacadeTests extends Specification {
     @Shared
@@ -33,6 +34,22 @@ class ServiceFacadeTests extends Specification {
         ec.destroy()
     }
 
+    void cleanupServiceJobRunTestData() {
+        boolean enableAuthz = !ec.artifactExecution.disableAuthz()
+        boolean beganTransaction = ec.transaction.begin(null)
+        try {
+            ec.entity.find("moqui.test.TestServiceJobRunRef").condition("testRefId", "TEST_SJR_REF").deleteAll()
+            ec.entity.find("moqui.service.job.ServiceJobRun").condition("jobRunId", "TEST_SJR_CLEAN_OLD").deleteAll()
+            ec.entity.find("moqui.service.job.ServiceJob").condition("jobName", "TEST_CLEAN_SJR").deleteAll()
+            ec.transaction.commit(beganTransaction)
+        } catch (Throwable t) {
+            ec.transaction.rollback(beganTransaction, "Error cleaning ServiceJobRun test data", t)
+            throw t
+        } finally {
+            if (enableAuthz) ec.artifactExecution.enableAuthz()
+        }
+    }
+
     def "register callback concurrently"() {
         def sfi = (ServiceFacadeImpl)ec.service
         ServiceCallback scb = Mock(ServiceCallback)
@@ -43,5 +60,40 @@ class ServiceFacadeTests extends Specification {
 
         then:
         10 * scb.receiveEvent(null, null)
+    }
+
+    def "clean ServiceJobRun clears dependent references before deleting old runs"() {
+        given:
+        cleanupServiceJobRunTestData()
+        boolean enableAuthz = !ec.artifactExecution.disableAuthz()
+        boolean beganTransaction = ec.transaction.begin(null)
+        try {
+            ec.entity.makeValue("moqui.service.job.ServiceJob").setAll([jobName:"TEST_CLEAN_SJR",
+                    serviceName:"org.moqui.impl.ServiceServices.clean#ServiceJobRun", paused:"Y"]).create()
+            ec.entity.makeValue("moqui.service.job.ServiceJobRun").setAll([jobRunId:"TEST_SJR_CLEAN_OLD",
+                    jobName:"TEST_CLEAN_SJR", startTime:new Timestamp(System.currentTimeMillis() - (120L * 24L * 60L * 60L * 1000L))]).create()
+            ec.entity.makeValue("moqui.test.TestServiceJobRunRef").setAll([testRefId:"TEST_SJR_REF",
+                    jobRunId:"TEST_SJR_CLEAN_OLD", testMedium:"Retained child record"]).create()
+            ec.transaction.commit(beganTransaction)
+        } catch (Throwable t) {
+            ec.transaction.rollback(beganTransaction, "Error preparing ServiceJobRun cleanup test data", t)
+            throw t
+        } finally {
+            if (enableAuthz) ec.artifactExecution.enableAuthz()
+        }
+
+        when:
+        Map result = ec.service.sync().name("org.moqui.impl.ServiceServices.clean#ServiceJobRun")
+                .parameters([daysToKeep:90]).call()
+
+        then:
+        result.recordsRemoved == 1
+        ec.entity.find("moqui.service.job.ServiceJobRun").condition("jobRunId", "TEST_SJR_CLEAN_OLD").disableAuthz().one() == null
+        def retainedRef = ec.entity.find("moqui.test.TestServiceJobRunRef").condition("testRefId", "TEST_SJR_REF").disableAuthz().one()
+        retainedRef != null
+        retainedRef.jobRunId == null
+
+        cleanup:
+        cleanupServiceJobRunTestData()
     }
 }
