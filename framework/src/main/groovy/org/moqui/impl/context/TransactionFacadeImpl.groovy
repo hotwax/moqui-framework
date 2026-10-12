@@ -411,6 +411,7 @@ class TransactionFacadeImpl implements TransactionFacade {
                     logger.warn((String) "Not committing transaction because status is " + getStatusString(), new Exception("Bad TX status location"))
             }
         } catch (RollbackException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             if (txStackInfo.rollbackOnlyInfo != null) {
                 logger.warn("Could not commit transaction, was marked rollback-only. The rollback-only was set here: ", txStackInfo.rollbackOnlyInfo.rollbackLocation)
                 throw new TransactionException("Could not commit transaction, was marked rollback-only. The rollback was originally caused by: " + txStackInfo.rollbackOnlyInfo.causeMessage, txStackInfo.rollbackOnlyInfo.causeThrowable)
@@ -418,12 +419,16 @@ class TransactionFacadeImpl implements TransactionFacade {
                 throw new TransactionException("Could not commit transaction, was rolled back instead (and we don't have a rollback-only cause)", e)
             }
         } catch (IllegalStateException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not commit transaction", e)
         } catch (HeuristicMixedException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not commit transaction", e)
         } catch (HeuristicRollbackException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not commit transaction", e)
         } catch (SystemException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not commit transaction", e)
         } finally {
             // there shouldn't be a TX around now, but if there is the commit may have failed so rollback to clean things up
@@ -474,8 +479,10 @@ class TransactionFacadeImpl implements TransactionFacade {
 
             ut.rollback()
         } catch (IllegalStateException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not rollback transaction", e)
         } catch (SystemException e) {
+            txStackInfo.markConnectionsForDestroy(e)
             throw new TransactionException("Could not rollback transaction", e)
         } finally {
             // NOTE: should this really be in finally? maybe we only want to do this if there is a successful rollback
@@ -529,10 +536,6 @@ class TransactionFacadeImpl implements TransactionFacade {
                 return false
             }
 
-            // close connections before suspend, let the pool reuse them
-            TxStackInfo txStackInfo = getTxStackInfo()
-            txStackInfo.closeTxConnections()
-
             Transaction tx = tm.suspend()
             // only do these after successful suspend
             pushTxStackInfo(tx, new Exception("Transaction Suspend Location"))
@@ -570,12 +573,24 @@ class TransactionFacadeImpl implements TransactionFacade {
     @Override
     Connection enlistConnection(XAConnection con) {
         if (con == null) return null
+        boolean enlisted = false
         try {
             XAResource resource = con.getXAResource()
             this.enlistResource(resource)
-            return con.getConnection()
+            // enlistResource succeeded: XA branch
+            Connection c = con.getConnection()
+            enlisted = true
+            return c
         } catch (SQLException e) {
             throw new TransactionException("Could not enlist connection in transaction", e)
+        } finally {
+            if (!enlisted) {
+                // Enlistment or connection retrieval failed. Close and destroy the XAConnection so
+                // Bitronix removes the physical connection from the pool. This prevents the cascade
+                // where a dirty XA branch (e.g. XAER_RMFAIL) is returned to the pool and triggers
+                // XAER_RMFAIL on every subsequent checkout of the same physical connection.
+                try { con.close() } catch (Throwable t) { logger.warn("Error closing XAConnection after enlist failure: " + t.getMessage()) }
+            }
         }
     }
 
@@ -681,7 +696,7 @@ class TransactionFacadeImpl implements TransactionFacade {
             return null
         }
         if (!isTransactionActive()) {
-            con.close()
+            con.closeInternal()
             txStackInfo.txConByGroup.remove(conKey)
             logger.info("Stashed connection found but transaction is not active (${getStatusString()}) for group ${groupName}: ${con.toString()}")
             return null

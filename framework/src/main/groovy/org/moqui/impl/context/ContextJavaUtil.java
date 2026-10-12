@@ -40,8 +40,11 @@ import org.slf4j.LoggerFactory;
 
 import javax.transaction.Synchronization;
 import javax.transaction.Transaction;
+import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.*;
@@ -366,6 +369,13 @@ public class ContextJavaUtil {
             }
             txConByGroup.clear();
         }
+
+        public void markConnectionsForDestroy(Throwable failure) {
+            if (!ConnectionWrapper.isXaRmFail(failure)) return;
+            for (ConnectionWrapper con: txConByGroup.values()) {
+                if (con != null) con.markDestroyOnClose();
+            }
+        }
     }
     public static class EntityRecordLock {
         // TODO enum for operation? create, update, delete, find-for-update
@@ -471,6 +481,9 @@ public class ContextJavaUtil {
         protected Connection con;
         TransactionFacadeImpl tfi;
         String groupName;
+        // When XAER_RMFAIL is detected on this connection, mark it for physical destruction on close
+        // so the dirty XA branch is not returned to the Bitronix pool and recycled indefinitely.
+        private volatile boolean destroyOnClose = false;
 
         public ConnectionWrapper(Connection con, TransactionFacadeImpl tfi, String groupName) {
             this.con = con;
@@ -481,12 +494,83 @@ public class ContextJavaUtil {
         public String getGroupName() { return groupName; }
 
         public void closeInternal() throws SQLException {
-            con.close();
+            if (destroyOnClose) {
+                // Physical destroy: removes connection from Bitronix pool entirely.
+                // Prevents XAER_RMFAIL cascade: dirty XA branch stays on pool connection when
+                // release() is called (XA END no-op + requeue), causing every subsequent checkout
+                // to fail. JdbcPooledConnection.close() destroys the physical connection instead.
+                physicallyDestroy();
+            } else {
+                // Normal path: release() back to pool via ConnectionJavaProxy.close().
+                con.close();
+            }
         }
 
-        @Override public Statement createStatement() throws SQLException { return con.createStatement(); }
-        @Override public PreparedStatement prepareStatement(String sql) throws SQLException { return con.prepareStatement(sql); }
-        @Override public CallableStatement prepareCall(String sql) throws SQLException { return con.prepareCall(sql); }
+        private void physicallyDestroy() {
+            // con is a JDK Proxy; handler is ConnectionJavaProxy which has getPooledConnection().
+            // JdbcPooledConnection.close() unregisters from pool and closes the physical DB connection.
+            try {
+                if (Proxy.isProxyClass(con.getClass())) {
+                    InvocationHandler handler = Proxy.getInvocationHandler(con);
+                    Object jdbcPC = handler.getClass().getMethod("getPooledConnection").invoke(handler);
+                    jdbcPC.getClass().getMethod("close").invoke(jdbcPC);
+                    return;
+                }
+            } catch (Throwable t) {
+                logger.warn("Could not physically destroy Bitronix pooled connection for group " + groupName + ", falling back to close()", t);
+            }
+            try { con.close(); } catch (Throwable t) { logger.warn("Error on fallback close for group " + groupName, t); }
+        }
+
+        static boolean isXaRmFail(Throwable failure) {
+            if (failure == null) return false;
+
+            Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+            Deque<Throwable> pending = new ArrayDeque<>();
+            pending.add(failure);
+            while (!pending.isEmpty()) {
+                Throwable current = pending.removeFirst();
+                if (!visited.add(current)) continue;
+                if (current instanceof XAException &&
+                        ((XAException) current).errorCode == XAException.XAER_RMFAIL) return true;
+
+                Throwable cause = current.getCause();
+                if (cause != null) pending.addLast(cause);
+                if (current instanceof SQLException) {
+                    SQLException next = ((SQLException) current).getNextException();
+                    if (next != null) pending.addLast(next);
+                }
+            }
+            return false;
+        }
+
+        public void markDestroyOnClose() { destroyOnClose = true; }
+
+        private void recordXaFailure(SQLException e) {
+            if (isXaRmFail(e)) markDestroyOnClose();
+        }
+
+        @Override public Statement createStatement() throws SQLException {
+            try { return con.createStatement(); }
+            catch (SQLException e) {
+                recordXaFailure(e);
+                throw e;
+            }
+        }
+        @Override public PreparedStatement prepareStatement(String sql) throws SQLException {
+            try { return con.prepareStatement(sql); }
+            catch (SQLException e) {
+                recordXaFailure(e);
+                throw e;
+            }
+        }
+        @Override public CallableStatement prepareCall(String sql) throws SQLException {
+            try { return con.prepareCall(sql); }
+            catch (SQLException e) {
+                recordXaFailure(e);
+                throw e;
+            }
+        }
         @Override public String nativeSQL(String sql) throws SQLException { return con.nativeSQL(sql); }
         @Override public void setAutoCommit(boolean autoCommit) throws SQLException { con.setAutoCommit(autoCommit); }
         @Override public boolean getAutoCommit() throws SQLException { return con.getAutoCommit(); }
@@ -510,11 +594,14 @@ public class ContextJavaUtil {
         @Override public void clearWarnings() throws SQLException { con.clearWarnings(); }
 
         @Override public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
-            return con.createStatement(resultSetType, resultSetConcurrency); }
+            try { return con.createStatement(resultSetType, resultSetConcurrency); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-            return con.prepareStatement(sql, resultSetType, resultSetConcurrency); }
+            try { return con.prepareStatement(sql, resultSetType, resultSetConcurrency); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-            return con.prepareCall(sql, resultSetType, resultSetConcurrency); }
+            try { return con.prepareCall(sql, resultSetType, resultSetConcurrency); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
 
         @Override public Map<String, Class<?>> getTypeMap() throws SQLException { return con.getTypeMap(); }
         @Override public void setTypeMap(Map<String, Class<?>> map) throws SQLException { con.setTypeMap(map); }
@@ -526,17 +613,23 @@ public class ContextJavaUtil {
         @Override public void releaseSavepoint(Savepoint savepoint) throws SQLException { con.releaseSavepoint(savepoint); }
 
         @Override public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-            return con.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability); }
+            try { return con.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-            return con.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability); }
+            try { return con.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-            return con.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability); }
+            try { return con.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-            return con.prepareStatement(sql, autoGeneratedKeys); }
+            try { return con.prepareStatement(sql, autoGeneratedKeys); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-            return con.prepareStatement(sql, columnIndexes); }
+            try { return con.prepareStatement(sql, columnIndexes); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
         @Override public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-            return con.prepareStatement(sql, columnNames); }
+            try { return con.prepareStatement(sql, columnNames); }
+            catch (SQLException e) { recordXaFailure(e); throw e; } }
 
         @Override public Clob createClob() throws SQLException { return con.createClob(); }
         @Override public Blob createBlob() throws SQLException { return con.createBlob(); }
