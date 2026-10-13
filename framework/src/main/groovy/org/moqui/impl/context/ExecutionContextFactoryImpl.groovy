@@ -68,6 +68,7 @@ import java.lang.management.ManagementFactory
 import java.math.RoundingMode
 import java.sql.Timestamp
 import java.util.concurrent.BlockingQueue
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ScheduledFuture
@@ -114,7 +115,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
     protected final Map<String, WebappInfo> webappInfoMap = new HashMap<>()
     protected final List<NotificationMessageListener> registeredNotificationMessageListeners = []
 
-    protected final Map<String, ArtifactStatsInfo> artifactStatsInfoByType = new HashMap<>()
+    protected final Map<String, ArtifactStatsInfo> artifactStatsInfoByType = new ConcurrentHashMap<>()
     public final Map<ArtifactType, Boolean> artifactTypeAuthzEnabled = new EnumMap<ArtifactType, Boolean>(ArtifactType.class)
     public final Map<ArtifactType, Boolean> artifactTypeTarpitEnabled = new EnumMap<ArtifactType, Boolean>(ArtifactType.class)
 
@@ -1480,12 +1481,11 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
             String binKey = artifactName
             // TODO: may be more cases where we don't need to append artifactTypeEnum, ie based on artifactName
             if (artifactSubType != null && !ArtifactExecutionInfo.AT_SERVICE.is(artifactTypeEnum)) binKey = binKey.concat(artifactSubType)
-            ArtifactStatsInfo statsInfo = (ArtifactStatsInfo) artifactStatsInfoByType.get(binKey)
-            if (statsInfo == null) {
-                // consider seeding this from the DB using ArtifactHitReport to get all past data, or maybe not to better handle different servers/etc over time, etc
-                statsInfo = new ArtifactStatsInfo(artifactTypeEnum, artifactSubType, artifactName)
-                artifactStatsInfoByType.put(binKey, statsInfo)
-            }
+            // Register each artifact atomically: concurrent worker hits must share one stats entry,
+            // and cannot corrupt the values snapshot used to persist final bins at shutdown.
+            ArtifactStatsInfo statsInfo = artifactStatsInfoByType.computeIfAbsent(binKey, { String ignored ->
+                new ArtifactStatsInfo(artifactTypeEnum, artifactSubType, artifactName)
+            })
 
             // has the current bin expired since the last hit record?
             if (statsInfo.curHitBin != null) {
