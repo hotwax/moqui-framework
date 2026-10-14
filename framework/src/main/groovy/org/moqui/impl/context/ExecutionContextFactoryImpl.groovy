@@ -1481,9 +1481,6 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
             String binKey = artifactName
             // TODO: may be more cases where we don't need to append artifactTypeEnum, ie based on artifactName
             if (artifactSubType != null && !ArtifactExecutionInfo.AT_SERVICE.is(artifactTypeEnum)) binKey = binKey.concat(artifactSubType)
-            // Register each artifact atomically: concurrent worker hits must share one stats entry,
-            // and cannot corrupt the values snapshot used to persist final bins at shutdown.
-            // Lock-free get() first so the hot path (already registered) allocates no closure and takes no bin lock.
             ArtifactStatsInfo statsInfo = artifactStatsInfoByType.get(binKey)
             if (statsInfo == null) statsInfo = artifactStatsInfoByType.computeIfAbsent(binKey, { String ignored ->
                 new ArtifactStatsInfo(artifactTypeEnum, artifactSubType, artifactName)
