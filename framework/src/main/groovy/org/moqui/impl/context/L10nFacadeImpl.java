@@ -31,6 +31,8 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.validator.routines.BigDecimalValidator;
 import org.apache.commons.validator.routines.CalendarValidator;
@@ -293,6 +295,8 @@ public class L10nFacadeImpl implements L10nFacade {
         return dateStr;
     }
 
+    static final Pattern sqlTimestampFraction = Pattern.compile(
+            "([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\\.([0-9]{1,9})");
     static final ArrayList<String> timestampFormats;
     static {
         timestampFormats = new ArrayList<>();
@@ -325,6 +329,23 @@ public class L10nFacadeImpl implements L10nFacade {
                     return new Timestamp(lng);
                 } catch (NumberFormatException e) {
                     if (logger.isTraceEnabled()) logger.trace("Ignoring NumberFormatException for Timestamp parse: " + e.toString());
+                }
+            }
+        }
+
+        // SQL Timestamp fractions are decimal seconds, while SimpleDateFormat's SSS is integer milliseconds.
+        // Keep explicit format precedence and Calendar's locale/time zone (including DST validation).
+        if (cal == null) {
+            Matcher fractionMatcher = sqlTimestampFraction.matcher(input);
+            if (fractionMatcher.matches()) {
+                cal = calendarValidator.validate(fractionMatcher.group(1), "yyyy-MM-dd HH:mm:ss", curLocale, curTz);
+                if (cal != null) {
+                    String fraction = fractionMatcher.group(2);
+                    int nanos = Integer.parseInt(fraction);
+                    for (int i = fraction.length(); i < 9; i++) nanos *= 10;
+                    Timestamp timestamp = new Timestamp(cal.getTimeInMillis());
+                    timestamp.setNanos(nanos);
+                    return timestamp;
                 }
             }
         }
