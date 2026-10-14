@@ -30,6 +30,17 @@ import java.text.NumberFormat;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.*;
 
 import org.apache.commons.validator.routines.BigDecimalValidator;
@@ -293,6 +304,37 @@ public class L10nFacadeImpl implements L10nFacade {
         return dateStr;
     }
 
+    // SQL (space) and ISO (T) date-times to the second, with an optional 1-9 digit decimal fraction and offset
+    static final DateTimeFormatter sqlDateTimeFormatter = canonicalDateTimeFormatter(' ');
+    static final DateTimeFormatter isoDateTimeFormatter = canonicalDateTimeFormatter('T');
+    private static DateTimeFormatter canonicalDateTimeFormatter(char separator) {
+        return new DateTimeFormatterBuilder().append(DateTimeFormatter.ISO_LOCAL_DATE).appendLiteral(separator)
+                .appendPattern("HH:mm:ss")
+                .optionalStart().appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true).optionalEnd()
+                .optionalStart().appendOffset("+HH:MM", "Z").optionalEnd()
+                .optionalStart().appendOffset("+HHMM", "Z").optionalEnd()
+                .toFormatter(Locale.ROOT).withResolverStyle(ResolverStyle.STRICT);
+    }
+    /** Parse a canonical date-time; null if the input is not canonical or its local time is in a DST gap. */
+    static Timestamp parseCanonicalTimestamp(String input, TimeZone timeZone) {
+        if (input.length() < 19) return null;
+        char separator = input.charAt(10);
+        DateTimeFormatter formatter = separator == ' ' ? sqlDateTimeFormatter : (separator == 'T' ? isoDateTimeFormatter : null);
+        if (formatter == null) return null;
+        TemporalAccessor parsed;
+        try {
+            parsed = formatter.parse(input);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+        LocalDateTime local = LocalDateTime.of(LocalDate.from(parsed), LocalTime.from(parsed));
+        if (parsed.isSupported(ChronoField.OFFSET_SECONDS)) return Timestamp.from(local.toInstant(ZoneOffset.from(parsed)));
+        // match the non-lenient Calendar parse: no time in a DST gap, standard (later) offset for a repeated hour
+        ZoneId zone = timeZone.toZoneId();
+        if (zone.getRules().getValidOffsets(local).isEmpty()) return null;
+        return Timestamp.from(local.atZone(zone).withLaterOffsetAtOverlap().toInstant());
+    }
+
     static final ArrayList<String> timestampFormats;
     static {
         timestampFormats = new ArrayList<>();
@@ -327,6 +369,13 @@ public class L10nFacadeImpl implements L10nFacade {
                     if (logger.isTraceEnabled()) logger.trace("Ignoring NumberFormatException for Timestamp parse: " + e.toString());
                 }
             }
+        }
+
+        // canonical SQL/ISO date-times via java.time, which reads fractions as decimal seconds (Timestamp.toString()
+        // writes .38 for 380ms) where SimpleDateFormat's SSS below reads an integer count of milliseconds
+        if (cal == null) {
+            Timestamp canonical = parseCanonicalTimestamp(input, curTz);
+            if (canonical != null) return canonical;
         }
 
         // try a bunch of other format strings
