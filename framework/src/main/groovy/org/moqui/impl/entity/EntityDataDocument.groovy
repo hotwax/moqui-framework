@@ -212,6 +212,11 @@ class EntityDataDocument {
     }
 
     EntityFind makeDataDocumentFind(DataDocumentInfo ddi, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp) {
+        return makeDataDocumentFind(ddi, fromUpdateStamp, thruUpdatedStamp, true)
+    }
+    /** @param useClone read from a datasource clone if one is configured; pass false when the documents must include
+     *     records just committed on the main datasource, as a clone is often a read replica that lags it */
+    EntityFind makeDataDocumentFind(DataDocumentInfo ddi, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp, boolean useClone) {
         // build the query condition for the primary entity and all related entities
         EntityDefinition ed = ddi.entityDef
         EntityFind mainFind = ed.makeEntityFind()
@@ -263,8 +268,8 @@ class EntityDataDocument {
             mainFind.condition(efi.getConditionFactory().makeCondition(dateRangeOrCondList, EntityCondition.OR))
         }
 
-        // use a read only clone if available, this always runs async or for reporting anyway
-        mainFind.useClone(true)
+        // use a read only clone if available and allowed, for async or reporting use where a lagging clone is fine
+        mainFind.useClone(useClone)
 
         // logger.warn("=========== DataDocument query condition for ${dataDocumentId} mainFind.condition=${((EntityFindImpl) mainFind).getWhereEntityCondition()}\n${mainFind.toString()}")
         return mainFind
@@ -351,9 +356,13 @@ class EntityDataDocument {
     }
 
     ArrayList<Map> getDataDocuments(String dataDocumentId, EntityCondition condition, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp) {
+        return getDataDocuments(dataDocumentId, condition, fromUpdateStamp, thruUpdatedStamp, true)
+    }
+    ArrayList<Map> getDataDocuments(String dataDocumentId, EntityCondition condition, Timestamp fromUpdateStamp,
+            Timestamp thruUpdatedStamp, boolean useClone) {
         DataDocumentInfo ddi = new DataDocumentInfo(dataDocumentId, efi)
 
-        EntityFind mainFind = makeDataDocumentFind(ddi, fromUpdateStamp, thruUpdatedStamp)
+        EntityFind mainFind = makeDataDocumentFind(ddi, fromUpdateStamp, thruUpdatedStamp, useClone)
         if (condition != null) mainFind.condition(condition)
 
         Timestamp docTimestamp = thruUpdatedStamp != (Timestamp) null ? thruUpdatedStamp : new Timestamp(System.currentTimeMillis())

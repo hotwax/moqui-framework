@@ -74,7 +74,10 @@ class EntityDataFeed {
         ArrayList<Map> fullDocumentList = new ArrayList<>()
         for (EntityValue dataFeedDocument in dataFeedDocumentList) {
             String dataDocumentId = dataFeedDocument.dataDocumentId
-            ArrayList<Map> curDocList = efi.getDataDocuments(dataDocumentId, null, fromUpdateStamp, thruUpdatedStamp)
+            // read the main datasource, not a clone: a lagging clone would miss records committed just before
+            //     thruUpdatedStamp, and getFeedLatestDocuments() moves lastFeedStamp past them
+            ArrayList<Map> curDocList = efi.entityDataDocument.getDataDocuments(dataDocumentId, null,
+                    fromUpdateStamp, thruUpdatedStamp, false)
             fullDocumentList.addAll(curDocList)
         }
         return fullDocumentList
@@ -749,7 +752,9 @@ class EntityDataFeed {
                     try {
                         // generate the document with the extra condition and send it to all DataFeeds
                         //     associated with the DataDocument
-                        List<Map> documents = efi.getDataDocuments(dataDocumentId, condition, null, null)
+                        // read the main datasource, not a clone: this runs right after the commit, before a
+                        //     lagging clone has the records, and a document missed here is never fed again
+                        List<Map> documents = efi.entityDataDocument.getDataDocuments(dataDocumentId, condition, null, null, false)
 
                         if (documents) {
                             EntityList dataFeedAndDocumentList = efi.find("moqui.entity.feed.DataFeedAndDocument")
