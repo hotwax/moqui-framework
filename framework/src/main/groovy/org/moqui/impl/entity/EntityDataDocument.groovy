@@ -211,7 +211,8 @@ class EntityDataDocument {
         return makeDataDocumentFind(ddi, null, null)
     }
 
-    EntityFind makeDataDocumentFind(DataDocumentInfo ddi, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp) {
+    EntityFind makeDataDocumentFind(DataDocumentInfo ddi, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp,
+                                   boolean useClone = true) {
         // build the query condition for the primary entity and all related entities
         EntityDefinition ed = ddi.entityDef
         EntityFind mainFind = ed.makeEntityFind()
@@ -263,8 +264,8 @@ class EntityDataDocument {
             mainFind.condition(efi.getConditionFactory().makeCondition(dateRangeOrCondList, EntityCondition.OR))
         }
 
-        // use a read only clone if available, this always runs async or for reporting anyway
-        mainFind.useClone(true)
+        // Batch/report reads may use a clone; post-commit real-time capture must read the writer.
+        mainFind.useClone(useClone)
 
         // logger.warn("=========== DataDocument query condition for ${dataDocumentId} mainFind.condition=${((EntityFindImpl) mainFind).getWhereEntityCondition()}\n${mainFind.toString()}")
         return mainFind
@@ -350,10 +351,11 @@ class EntityDataDocument {
         return docCount
     }
 
-    ArrayList<Map> getDataDocuments(String dataDocumentId, EntityCondition condition, Timestamp fromUpdateStamp, Timestamp thruUpdatedStamp) {
+    ArrayList<Map> getDataDocuments(String dataDocumentId, EntityCondition condition, Timestamp fromUpdateStamp,
+                                  Timestamp thruUpdatedStamp, boolean useClone = true) {
         DataDocumentInfo ddi = new DataDocumentInfo(dataDocumentId, efi)
 
-        EntityFind mainFind = makeDataDocumentFind(ddi, fromUpdateStamp, thruUpdatedStamp)
+        EntityFind mainFind = makeDataDocumentFind(ddi, fromUpdateStamp, thruUpdatedStamp, useClone)
         if (condition != null) mainFind.condition(condition)
 
         Timestamp docTimestamp = thruUpdatedStamp != (Timestamp) null ? thruUpdatedStamp : new Timestamp(System.currentTimeMillis())

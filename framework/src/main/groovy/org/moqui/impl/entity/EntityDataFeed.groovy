@@ -749,7 +749,9 @@ class EntityDataFeed {
                     try {
                         // generate the document with the extra condition and send it to all DataFeeds
                         //     associated with the DataDocument
-                        List<Map> documents = efi.getDataDocuments(dataDocumentId, condition, null, null)
+                        // A clone may not yet contain the rows that just committed. Missing selectors
+                        // are not retried, so real-time documents must be generated from the writer.
+                        List<Map> documents = efi.getEntityDataDocument().getDataDocuments(dataDocumentId, condition, null, null, false)
 
                         if (documents) {
                             EntityList dataFeedAndDocumentList = efi.find("moqui.entity.feed.DataFeedAndDocument")
