@@ -263,8 +263,8 @@ class EntityDataDocument {
             mainFind.condition(efi.getConditionFactory().makeCondition(dateRangeOrCondList, EntityCondition.OR))
         }
 
-        // use a read only clone if available, this always runs async or for reporting anyway
-        mainFind.useClone(true)
+        // use a read only clone if available; set useClone=N on the DataDocument to force transactional db
+        if ("N" != ddi.dataDocument.getNoCheckSimple("useClone")) mainFind.useClone(true)
 
         // logger.warn("=========== DataDocument query condition for ${dataDocumentId} mainFind.condition=${((EntityFindImpl) mainFind).getWhereEntityCondition()}\n${mainFind.toString()}")
         return mainFind
