@@ -1,0 +1,51 @@
+From 961dd65597cb3677100d10daf29519e6992e8d94 Mon Sep 17 00:00:00 2001
+From: Deepak Dixit <deepak.dixit@hotwax.co>
+Date: Fri, 16 Oct 2026 11:05:49 +0530
+Subject: [PATCH] feat(data-document): add configurable useClone flag on
+ DataDocument
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add useClone (text-indicator) field to the DataDocument entity. When set
+to N, data document queries run against the transactional database instead
+of the read-only clone — useful for time-critical documents where clone
+replication lag is unacceptable. Default (null/Y) preserves existing
+clone behaviour unchanged.
+---
+ framework/entity/EntityEntities.xml                           | 3 +++
+ .../groovy/org/moqui/impl/entity/EntityDataDocument.groovy    | 4 ++--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/framework/entity/EntityEntities.xml b/framework/entity/EntityEntities.xml
+index f2e7d514..72732ab8 100644
+--- a/framework/entity/EntityEntities.xml
++++ b/framework/entity/EntityEntities.xml
+@@ -109,6 +109,9 @@ along with this software (see the LICENSE.md file). If not, see
+         <field name="manualMappingServiceName" type="text-medium"><description>Name of a service to call to alter the generated
+             elasticsearch mapping for the data document. This service should implement the
+             org.moqui.EntityServices.transform#DocumentMapping interface.</description></field>
++        <field name="useClone" type="text-indicator"><description>When N, queries for this document run against the
++            transactional database instead of the read-only clone. Use for time-critical documents where clone
++            replication lag is unacceptable. Default (Y or empty) uses the clone if available.</description></field>
+ 
+         <relationship type="many" related="moqui.entity.document.DataDocumentField" short-alias="fields">
+             <key-map field-name="dataDocumentId"/></relationship>
+diff --git a/framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy b/framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
+index f75fd41c..8e1edb64 100644
+--- a/framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
++++ b/framework/src/main/groovy/org/moqui/impl/entity/EntityDataDocument.groovy
+@@ -263,8 +263,8 @@ class EntityDataDocument {
+             mainFind.condition(efi.getConditionFactory().makeCondition(dateRangeOrCondList, EntityCondition.OR))
+         }
+ 
+-        // use a read only clone if available, this always runs async or for reporting anyway
+-        mainFind.useClone(true)
++        // use a read only clone if available; set useClone=N on the DataDocument to force transactional db
++        if ("N" != ddi.dataDocument.getNoCheckSimple("useClone")) mainFind.useClone(true)
+ 
+         // logger.warn("=========== DataDocument query condition for ${dataDocumentId} mainFind.condition=${((EntityFindImpl) mainFind).getWhereEntityCondition()}\n${mainFind.toString()}")
+         return mainFind
+-- 
+2.56.0
+
