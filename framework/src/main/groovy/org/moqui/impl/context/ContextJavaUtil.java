@@ -38,6 +38,7 @@ import org.moqui.util.ObjectUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import bitronix.tm.resource.jdbc.PooledConnectionProxy;
 import javax.transaction.Synchronization;
 import javax.transaction.Transaction;
 import javax.transaction.xa.XAException;
@@ -507,15 +508,28 @@ public class ContextJavaUtil {
         }
 
         private void physicallyDestroy() {
-            // con is a JDK Proxy; handler is ConnectionJavaProxy which has getPooledConnection().
-            // JdbcPooledConnection.close() unregisters from pool and closes the physical DB connection.
+            // Evict the connection from the Bitronix pool instead of returning it. Every Bitronix connection proxy
+            // implements PooledConnectionProxy, whatever the proxy flavor: a Javassist/CGLIB generated subclass of
+            // ConnectionJavaProxy (btm 3.0.0 with javassist on the classpath) or a JDK dynamic proxy (btm 4.x).
+            // Do NOT test Proxy.isProxyClass() here: it is false for the generated subclass, which silently skipped the
+            // eviction and let con.close() put the broken XA connection back into the pool.
+            // JdbcPooledConnection.close() unregisters it from the pool and closes the physical DB connection.
             try {
+                if (con instanceof PooledConnectionProxy) {
+                    ((PooledConnectionProxy) con).getPooledConnection().close();
+                    logger.warn("Evicted broken XA connection from the Bitronix pool for group " + groupName);
+                    return;
+                }
                 if (Proxy.isProxyClass(con.getClass())) {
+                    // fallback for a proxy that does not expose the interface but whose handler does
                     InvocationHandler handler = Proxy.getInvocationHandler(con);
                     Object jdbcPC = handler.getClass().getMethod("getPooledConnection").invoke(handler);
                     jdbcPC.getClass().getMethod("close").invoke(jdbcPC);
+                    logger.warn("Evicted broken XA connection from the Bitronix pool (via proxy handler) for group " + groupName);
                     return;
                 }
+                logger.warn("Cannot evict broken XA connection for group " + groupName + ": " + con.getClass().getName() +
+                        " is not a Bitronix PooledConnectionProxy, falling back to close() and it may return to the pool");
             } catch (Throwable t) {
                 logger.warn("Could not physically destroy Bitronix pooled connection for group " + groupName + ", falling back to close()", t);
             }
