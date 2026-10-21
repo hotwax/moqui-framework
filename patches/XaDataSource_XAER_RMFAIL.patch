@@ -1,10 +1,8 @@
 diff --git a/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java b/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
-index f3054ae..98b8ca3 100644
+index f3054aec..3a276763 100644
 --- a/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
 +++ b/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
-@@ -38,10 +38,14 @@ import org.moqui.util.ObjectUtilities;
- import org.slf4j.Logger;
- import org.slf4j.LoggerFactory;
+@@ -40,8 +40,12 @@ import org.slf4j.LoggerFactory;
  
 +import bitronix.tm.resource.jdbc.PooledConnectionProxy;
  import jakarta.transaction.Synchronization;
@@ -56,8 +54,11 @@ index f3054ae..98b8ca3 100644
 +                // Normal path: release() back to pool via ConnectionJavaProxy.close().
 +                con.close();
 +            }
-+        }
-+
+         }
+ 
+-        @Override public Statement createStatement() throws SQLException { return con.createStatement(); }
+-        @Override public PreparedStatement prepareStatement(String sql) throws SQLException { return con.prepareStatement(sql); }
+-        @Override public CallableStatement prepareCall(String sql) throws SQLException { return con.prepareCall(sql); }
 +        private void physicallyDestroy() {
 +            // Evict the connection from the Bitronix pool instead of returning it. Every Bitronix connection proxy
 +            // implements PooledConnectionProxy, whatever the proxy flavor: a Javassist/CGLIB generated subclass of
@@ -113,11 +114,8 @@ index f3054ae..98b8ca3 100644
 +
 +        private void recordXaFailure(SQLException e) {
 +            if (isXaRmFail(e)) markDestroyOnClose();
-         }
- 
--        @Override public Statement createStatement() throws SQLException { return con.createStatement(); }
--        @Override public PreparedStatement prepareStatement(String sql) throws SQLException { return con.prepareStatement(sql); }
--        @Override public CallableStatement prepareCall(String sql) throws SQLException { return con.prepareCall(sql); }
++        }
++
 +        @Override public Statement createStatement() throws SQLException {
 +            try { return con.createStatement(); }
 +            catch (SQLException e) {
@@ -191,7 +189,7 @@ index f3054ae..98b8ca3 100644
          @Override public Clob createClob() throws SQLException { return con.createClob(); }
          @Override public Blob createBlob() throws SQLException { return con.createBlob(); }
 diff --git a/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy b/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
-index 7552516..2c015fd 100644
+index 75525163..2c015fd1 100644
 --- a/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
 +++ b/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
 @@ -395,7 +395,6 @@ class TransactionFacadeImpl implements TransactionFacade {

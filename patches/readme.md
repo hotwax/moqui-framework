@@ -132,7 +132,7 @@ When a service job runs, it now puts `_jobRunId` into the service context before
 
 -------------------------------------------------------------------------
 
-### [XaDataSource_XAER_RMFAIL.patch](./XaDataSource_XAER_RMFAIL.patch)
+### [XaConnectionPollution.patch](./XaConnectionPollution.patch)
 Fixed XA connection pool pollution issue caused by closing connections early during commit and rollback.
 
 **Root Cause**: Connections were being closed and returned to the pool before the JTA transaction fully completed, leading to other concurrent threads getting `XAER_RMFAIL` errors when trying to enlist the same connection.
