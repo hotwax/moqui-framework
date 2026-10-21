@@ -137,6 +137,7 @@ Fixed XA connection pool pollution issue caused by closing connections early dur
 
 **Root Cause**: Connections were being closed and returned to the pool before the JTA transaction fully completed, leading to other concurrent threads getting `XAER_RMFAIL` errors when trying to enlist the same connection.
 **Fix**: Removed early `closeTxConnections()` calls inside both the commit and rollback methods. Connections are now safely closed in the `finally` block when the stack clean-up runs, ensuring physical connections are only released back to the pool once their transaction has fully ended.
+**Eviction follow-up**: `ConnectionWrapper.physicallyDestroy()` now evicts the broken connection with `con instanceof PooledConnectionProxy` instead of `Proxy.isProxyClass(...)`. The old guard is false for the javassist-generated Bitronix connection proxy used by the 3.5.x line (btm 3.0.0), so the eviction was silently skipped and the wedged connection went back to the pool. A WARN is logged when a connection is evicted or cannot be evicted.
 
 -------------------------------------------------------------------------
 
