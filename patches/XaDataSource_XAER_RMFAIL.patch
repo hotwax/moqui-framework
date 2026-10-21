@@ -1,9 +1,12 @@
 diff --git a/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java b/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
-index f3054aec..3a276763 100644
+index f3054ae..98b8ca3 100644
 --- a/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
 +++ b/framework/src/main/groovy/org/moqui/impl/context/ContextJavaUtil.java
-@@ -40,8 +40,11 @@ import org.slf4j.LoggerFactory;
+@@ -38,10 +38,14 @@ import org.moqui.util.ObjectUtilities;
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
  
++import bitronix.tm.resource.jdbc.PooledConnectionProxy;
  import jakarta.transaction.Synchronization;
  import jakarta.transaction.Transaction;
 +import javax.transaction.xa.XAException;
@@ -14,7 +17,7 @@ index f3054aec..3a276763 100644
  import java.math.BigDecimal;
  import java.math.RoundingMode;
  import java.sql.*;
-@@ -366,6 +369,13 @@ public class ContextJavaUtil {
+@@ -366,6 +370,13 @@ public class ContextJavaUtil {
              }
              txConByGroup.clear();
          }
@@ -28,7 +31,7 @@ index f3054aec..3a276763 100644
      }
      public static class EntityRecordLock {
          // TODO enum for operation? create, update, delete, find-for-update
-@@ -471,6 +481,9 @@ public class ContextJavaUtil {
+@@ -471,6 +482,9 @@ public class ContextJavaUtil {
          protected Connection con;
          TransactionFacadeImpl tfi;
          String groupName;
@@ -38,7 +41,7 @@ index f3054aec..3a276763 100644
  
          public ConnectionWrapper(Connection con, TransactionFacadeImpl tfi, String groupName) {
              this.con = con;
-@@ -481,12 +494,83 @@ public class ContextJavaUtil {
+@@ -481,12 +495,96 @@ public class ContextJavaUtil {
          public String getGroupName() { return groupName; }
  
          public void closeInternal() throws SQLException {
@@ -53,21 +56,31 @@ index f3054aec..3a276763 100644
 +                // Normal path: release() back to pool via ConnectionJavaProxy.close().
 +                con.close();
 +            }
-         }
- 
--        @Override public Statement createStatement() throws SQLException { return con.createStatement(); }
--        @Override public PreparedStatement prepareStatement(String sql) throws SQLException { return con.prepareStatement(sql); }
--        @Override public CallableStatement prepareCall(String sql) throws SQLException { return con.prepareCall(sql); }
++        }
++
 +        private void physicallyDestroy() {
-+            // con is a JDK Proxy; handler is ConnectionJavaProxy which has getPooledConnection().
-+            // JdbcPooledConnection.close() unregisters from pool and closes the physical DB connection.
++            // Evict the connection from the Bitronix pool instead of returning it. Every Bitronix connection proxy
++            // implements PooledConnectionProxy, whatever the proxy flavor: a Javassist/CGLIB generated subclass of
++            // ConnectionJavaProxy (btm 3.0.0 with javassist on the classpath) or a JDK dynamic proxy (btm 4.x).
++            // Do NOT test Proxy.isProxyClass() here: it is false for the generated subclass, which silently skipped the
++            // eviction and let con.close() put the broken XA connection back into the pool.
++            // JdbcPooledConnection.close() unregisters it from the pool and closes the physical DB connection.
 +            try {
++                if (con instanceof PooledConnectionProxy) {
++                    ((PooledConnectionProxy) con).getPooledConnection().close();
++                    logger.warn("Evicted broken XA connection from the Bitronix pool for group " + groupName);
++                    return;
++                }
 +                if (Proxy.isProxyClass(con.getClass())) {
++                    // fallback for a proxy that does not expose the interface but whose handler does
 +                    InvocationHandler handler = Proxy.getInvocationHandler(con);
 +                    Object jdbcPC = handler.getClass().getMethod("getPooledConnection").invoke(handler);
 +                    jdbcPC.getClass().getMethod("close").invoke(jdbcPC);
++                    logger.warn("Evicted broken XA connection from the Bitronix pool (via proxy handler) for group " + groupName);
 +                    return;
 +                }
++                logger.warn("Cannot evict broken XA connection for group " + groupName + ": " + con.getClass().getName() +
++                        " is not a Bitronix PooledConnectionProxy, falling back to close() and it may return to the pool");
 +            } catch (Throwable t) {
 +                logger.warn("Could not physically destroy Bitronix pooled connection for group " + groupName + ", falling back to close()", t);
 +            }
@@ -100,8 +113,11 @@ index f3054aec..3a276763 100644
 +
 +        private void recordXaFailure(SQLException e) {
 +            if (isXaRmFail(e)) markDestroyOnClose();
-+        }
-+
+         }
+ 
+-        @Override public Statement createStatement() throws SQLException { return con.createStatement(); }
+-        @Override public PreparedStatement prepareStatement(String sql) throws SQLException { return con.prepareStatement(sql); }
+-        @Override public CallableStatement prepareCall(String sql) throws SQLException { return con.prepareCall(sql); }
 +        @Override public Statement createStatement() throws SQLException {
 +            try { return con.createStatement(); }
 +            catch (SQLException e) {
@@ -126,7 +142,7 @@ index f3054aec..3a276763 100644
          @Override public String nativeSQL(String sql) throws SQLException { return con.nativeSQL(sql); }
          @Override public void setAutoCommit(boolean autoCommit) throws SQLException { con.setAutoCommit(autoCommit); }
          @Override public boolean getAutoCommit() throws SQLException { return con.getAutoCommit(); }
-@@ -510,11 +594,14 @@ public class ContextJavaUtil {
+@@ -510,11 +608,14 @@ public class ContextJavaUtil {
          @Override public void clearWarnings() throws SQLException { con.clearWarnings(); }
  
          @Override public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
@@ -144,7 +160,7 @@ index f3054aec..3a276763 100644
  
          @Override public Map<String, Class<?>> getTypeMap() throws SQLException { return con.getTypeMap(); }
          @Override public void setTypeMap(Map<String, Class<?>> map) throws SQLException { con.setTypeMap(map); }
-@@ -526,17 +613,23 @@ public class ContextJavaUtil {
+@@ -526,17 +627,23 @@ public class ContextJavaUtil {
          @Override public void releaseSavepoint(Savepoint savepoint) throws SQLException { con.releaseSavepoint(savepoint); }
  
          @Override public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
@@ -175,7 +191,7 @@ index f3054aec..3a276763 100644
          @Override public Clob createClob() throws SQLException { return con.createClob(); }
          @Override public Blob createBlob() throws SQLException { return con.createBlob(); }
 diff --git a/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy b/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
-index 75525163..2c015fd1 100644
+index 7552516..2c015fd 100644
 --- a/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
 +++ b/framework/src/main/groovy/org/moqui/impl/context/TransactionFacadeImpl.groovy
 @@ -395,7 +395,6 @@ class TransactionFacadeImpl implements TransactionFacade {
