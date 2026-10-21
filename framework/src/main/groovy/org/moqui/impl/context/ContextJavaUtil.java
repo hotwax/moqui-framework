@@ -13,6 +13,7 @@
  */
 package org.moqui.impl.context;
 
+import bitronix.tm.resource.jdbc.PooledConnectionProxy;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -43,8 +44,6 @@ import javax.transaction.Transaction;
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.*;
@@ -495,27 +494,19 @@ public class ContextJavaUtil {
 
         public void closeInternal() throws SQLException {
             if (destroyOnClose) {
-                // Physical destroy: removes connection from Bitronix pool entirely.
-                // Prevents XAER_RMFAIL cascade: dirty XA branch stays on pool connection when
-                // release() is called (XA END no-op + requeue), causing every subsequent checkout
-                // to fail. JdbcPooledConnection.close() destroys the physical connection instead.
                 physicallyDestroy();
             } else {
-                // Normal path: release() back to pool via ConnectionJavaProxy.close().
                 con.close();
             }
         }
 
         private void physicallyDestroy() {
-            // con is a JDK Proxy; handler is ConnectionJavaProxy which has getPooledConnection().
-            // JdbcPooledConnection.close() unregisters from pool and closes the physical DB connection.
             try {
-                if (Proxy.isProxyClass(con.getClass())) {
-                    InvocationHandler handler = Proxy.getInvocationHandler(con);
-                    Object jdbcPC = handler.getClass().getMethod("getPooledConnection").invoke(handler);
-                    jdbcPC.getClass().getMethod("close").invoke(jdbcPC);
+                if (con instanceof PooledConnectionProxy) {
+                    ((PooledConnectionProxy) con).getPooledConnection().close();
                     return;
                 }
+                logger.warn("Connection for group " + groupName + " is not a Bitronix pooled connection, closing it instead of destroying it");
             } catch (Throwable t) {
                 logger.warn("Could not physically destroy Bitronix pooled connection for group " + groupName + ", falling back to close()", t);
             }
