@@ -476,12 +476,16 @@ abstract class EntityFindBase implements EntityFind {
                         }
                         break
                     case "empty":
-                        cond = efi.entityConditionFactory.makeCondition(
-                                efi.entityConditionFactory.makeCondition(fn,
-                                        not ? EntityCondition.NOT_EQUAL : EntityCondition.EQUALS, null),
-                                not ? EntityCondition.JoinOperator.AND : EntityCondition.JoinOperator.OR,
-                                efi.entityConditionFactory.makeCondition(fn,
-                                        not ? EntityCondition.NOT_EQUAL : EntityCondition.EQUALS, ""))
+                        cond = efi.entityConditionFactory.makeCondition(fn,
+                                not ? EntityCondition.NOT_EQUAL : EntityCondition.EQUALS, null)
+                        // Only String fields can contain an empty string. Comparing typed fields
+                        // (timestamps, numbers, etc.) with "" causes JDBC conversion errors.
+                        if (fi.typeValue == EntityFacadeImpl.ENTITY_STRING) {
+                            cond = efi.entityConditionFactory.makeCondition(cond,
+                                    not ? EntityCondition.JoinOperator.AND : EntityCondition.JoinOperator.OR,
+                                    efi.entityConditionFactory.makeCondition(fn,
+                                            not ? EntityCondition.NOT_EQUAL : EntityCondition.EQUALS, ""))
+                        }
                         break
                     case "in":
                         if (!valueEmpty) {
