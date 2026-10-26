@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-facade-xml type="ext">
+
+    <!-- Sales Order Sync -->
+    <co.hotwax.rule.RuleGroup ruleGroupId="MB_NS_ORDER_PUSH_RULE_GROUP" productStoreId="STORE"
+            groupTypeEnumId="RG_NS_ORDER_PUSH" statusId="ATP_RG_ACTIVE"
+            jobName="create_NetSuiteSalesOrderBatch"/>
+    <co.hotwax.rule.DecisionRule ruleId="MB_NS_ORDER_PUSH_RULE" ruleGroupId="MB_NS_ORDER_PUSH_RULE_GROUP"
+            ruleName="NetSuite Sales Order Sync from OMS" statusId="ATP_RULE_ACTIVE" sequenceNum="1"/>
+    <co.hotwax.rule.RuleCondition ruleId="MB_NS_ORDER_PUSH_RULE" conditionSeqId="01"
+            conditionTypeEnumId="ENTCT_FILTER" fieldName="orderDate" operator="greater-than" fieldValue=""/>
+
+    <moqui.service.job.ServiceJob jobName="create_NetSuiteSalesOrderBatch"
+            description="Create Malbon NetSuite Sales Order batch"
+            serviceName="co.hotwax.netsuite.NetSuiteRecordServices.create#NetSuiteSalesOrderBatch"
+            cronExpression="0 0/10 * * * ?" paused="Y" productStoreId="STORE">
+        <parameters parameterName="ruleGroupId" parameterValue="MB_NS_ORDER_PUSH_RULE_GROUP"/>
+        <parameters parameterName="rootNodeId" parameterValue="MB_SO"/>
+        <parameters parameterName="productStoreId" parameterValue="STORE"/>
+        <parameters parameterName="customerServiceName"
+                parameterValue="co.hotwax.netsuite.NetSuiteOrderCustomerServices.set#NetSuiteOrderCustomerFromFacility"/>
+        <parameters parameterName="systemMessageTypeId" parameterValue="NetSuiteSalesOrderScriptBatch"/>
+        <parameters parameterName="systemMessageRemoteId" parameterValue="NS_SCRIPT_RESTLET"/>
+        <parameters parameterName="batchSize" parameterValue="100"/>
+    </moqui.service.job.ServiceJob>
+
+    <moqui.service.job.ServiceJob jobName="send_ProducedNetSuiteScriptTaskMessages"
+            description="Send produced NetSuite script task messages"
+            serviceName="co.hotwax.netsuite.NetSuiteBatchServices.send#ProducedNetSuiteAsyncBatchMessages"
+            cronExpression="0 3/10 * * * ?" paused="Y">
+        <parameters parameterName="parentSystemMessageTypeId" parameterValue="NetSuiteScriptTask"/>
+    </moqui.service.job.ServiceJob>
+
+    <moqui.service.job.ServiceJob jobName="poll_NetSuiteScriptTaskResult"
+            description="Poll NetSuite script task results"
+            serviceName="co.hotwax.netsuite.NetSuiteBatchServices.poll#NetSuiteScriptTaskResult"
+            cronExpression="0 4/5 * * * ?" paused="Y"/>
+
+    <!-- Fulfillment Sync OMS to NetSuite -->
+    <co.hotwax.rule.RuleGroup ruleGroupId="MB_NS_STORE_FULFILLMENT_RULE_GROUP" productStoreId="STORE"
+            groupTypeEnumId="RG_NS_ORDER_PUSH" statusId="ATP_RG_ACTIVE"
+            jobName="create_NetSuiteStoreFulfillmentBatch"/>
+    <co.hotwax.rule.DecisionRule ruleId="MB_NS_STORE_FULFILLMENT_RULE"
+            ruleGroupId="MB_NS_STORE_FULFILLMENT_RULE_GROUP"
+            ruleName="NetSuite Store Fulfillment Sync from OMS" statusId="ATP_RULE_ACTIVE" sequenceNum="1"/>
+    <co.hotwax.rule.RuleCondition ruleId="MB_NS_STORE_FULFILLMENT_RULE" conditionSeqId="01"
+            conditionTypeEnumId="ENTCT_FILTER" fieldName="orderDate" operator="greater-than" fieldValue=""/>
+    <co.hotwax.rule.RuleCondition ruleId="MB_NS_STORE_FULFILLMENT_RULE" conditionSeqId="02"
+            conditionTypeEnumId="ENTCT_SORT_BY" fieldName="completedDate" sequenceNum="2"/>
+
+    <moqui.service.job.ServiceJob jobName="create_NetSuiteStoreFulfillmentBatch"
+            description="Create NetSuite fulfillment batch from completed OMS order lines"
+            serviceName="co.hotwax.netsuite.NetSuiteRecordServices.create#NetSuiteStoreFulfillmentBatch"
+            cronExpression="0 1/5 * * * ?" paused="Y" productStoreId="STORE">
+        <parameters parameterName="ruleGroupId" parameterValue="MB_NS_STORE_FULFILLMENT_RULE_GROUP"/>
+        <parameters parameterName="productStoreId" parameterValue="STORE"/>
+        <parameters parameterName="dueViewName" parameterValue="co.hotwax.netsuite.NetSuiteStoreFulfillmentDueView"/>
+        <parameters parameterName="systemMessageRemoteId" parameterValue="NETSUITE_REST_API"/>
+        <parameters parameterName="batchSize" parameterValue="100"/>
+        <parameters parameterName="retryAfterHours" parameterValue="24"/>
+        <parameters parameterName="attemptLimit" parameterValue="7"/>
+    </moqui.service.job.ServiceJob>
+
+    <!-- Fulfillment Sync NetSuite to OMS -->
+    <moqui.service.job.ServiceJob jobName="poll_NetSuiteItemFulfillments"
+            description="Import shipped NetSuite fulfillments into OMS shipments"
+            serviceName="co.hotwax.netsuite.NetSuiteItemFulfillmentServices.poll#NetSuiteItemFulfillments"
+            cronExpression="0 0/5 * * * ?" paused="Y">
+        <parameters parameterName="systemMessageRemoteId" parameterValue="NETSUITE_REST_API"/>
+        <parameters parameterName="facilityGroupId" parameterValue="NETSUITE_FULFILLMENT"/>
+        <parameters parameterName="netsuiteTimeZone" parameterValue="America/Los_Angeles"/>
+        <parameters parameterName="overlapMinutes" parameterValue="15"/>
+        <parameters parameterName="fetchBatchSize" parameterValue="5000"/>
+        <parameters parameterName="lastModifiedDate" parameterValue=""/>
+    </moqui.service.job.ServiceJob>
+
+    <moqui.service.job.ServiceJob jobName="poll_NetSuiteWaitingOrderFulfillments"
+            description="Retry NetSuite fulfillments for waiting orders"
+            serviceName="co.hotwax.netsuite.NetSuiteItemFulfillmentServices.poll#NetSuiteWaitingOrderFulfillments"
+            cronExpression="0 7 * * * ?" paused="Y">
+        <parameters parameterName="systemMessageRemoteId" parameterValue="NETSUITE_REST_API"/>
+        <parameters parameterName="facilityGroupId" parameterValue="NETSUITE_FULFILLMENT"/>
+        <parameters parameterName="netsuiteTimeZone" parameterValue="America/Los_Angeles"/>
+        <parameters parameterName="minAgeHours" parameterValue="6"/>
+        <parameters parameterName="batchSize" parameterValue="200"/>
+        <parameters parameterName="attemptLimit" parameterValue="5"/>
+        <parameters parameterName="fetchBatchSize" parameterValue="5000"/>
+        <parameters parameterName="lastPushedDate" parameterValue=""/>
+    </moqui.service.job.ServiceJob>
+
+</entity-facade-xml>
