@@ -21,13 +21,51 @@ along with this software (see the LICENSE.md file). If not, see
             <script>
                 import org.moqui.context.ExecutionContext
                 import org.moqui.entity.EntityCondition
+                import org.moqui.entity.EntityList
+                import org.moqui.entity.EntityListIterator
+                import org.moqui.entity.EntityValue
+                import org.moqui.impl.entity.EntityJavaUtil
                 ExecutionContext ec = context.ec
                 Calendar basisCal = ec.user.getCalendarSafe()
                 basisCal.add(Calendar.DAY_OF_YEAR, (int) -daysToKeep)
                 basisTimestamp = new Timestamp(basisCal.getTimeInMillis())
-                recordsRemoved = ec.entity.find("moqui.service.job.ServiceJobRun")
-                        .condition("startTime", EntityCondition.LESS_THAN, basisTimestamp)
-                        .disableAuthz().deleteAll()
+                recordsRemoved = 0L
+
+                boolean enableAuthz = !ec.artifactExecution.disableAuthz()
+                try {
+                    EntityValue serviceJobRun
+                    try (EntityListIterator eli = ec.entity.find("moqui.service.job.ServiceJobRun")
+                            .condition("startTime", EntityCondition.LESS_THAN, basisTimestamp)
+                            .disableAuthz().iterator()) {
+                        while ((serviceJobRun = eli.next()) != null) {
+                            for (EntityJavaUtil.RelationshipInfo relInfo : serviceJobRun.getEntityDefinition().getRelationshipsInfo(false)) {
+                                EntityJavaUtil.RelationshipInfo reverseInfo = relInfo.findReverse()
+                                if (reverseInfo == null || !reverseInfo.isTypeOne) continue
+
+                                boolean canClearRef = true
+                                for (String fieldName : reverseInfo.keyMap.keySet()) {
+                                    if (relInfo.relatedEd.isPkField(fieldName) ||
+                                            "true".equals(relInfo.relatedEd.getFieldNode(fieldName).attribute("not-null"))) {
+                                        canClearRef = false
+                                        break
+                                    }
+                                }
+                                if (!canClearRef) continue
+
+                                EntityList relatedList = serviceJobRun.findRelated(relInfo.relationshipName, null, null, false, true)
+                                for (EntityValue relatedValue : relatedList) {
+                                    for (String fieldName : reverseInfo.keyMap.keySet()) relatedValue.set(fieldName, null)
+                                    if (relatedValue.isModified()) relatedValue.update()
+                                }
+                            }
+
+                            serviceJobRun.delete()
+                            recordsRemoved++
+                        }
+                    }
+                } finally {
+                    if (enableAuthz) ec.artifactExecution.enableAuthz()
+                }
             </script>
             <log level="info" message="Removed ${recordsRemoved} ServiceJobRun records."/>
         </actions>
