@@ -29,12 +29,38 @@ dependencyUpdates.resolutionStrategy {
     }
 }
 
+// Configure these in ~/.gradle/gradle.properties (or as Gradle project properties);
+// environment variables with the same names are used when a property is not set:
+//   NEXUS_URL=https://nexus.hotwax.io/repository/maven-central/
+//   NEXUS_USERNAME=your-username
+//   NEXUS_PASSWORD=your-password
+def nexusSetting = { String name ->
+    providers.gradleProperty(name).getOrNull() ?: System.getenv(name)
+}
+def nexusUrl = nexusSetting('NEXUS_URL')?.trim()
+def nexusUsername = nexusSetting('NEXUS_USERNAME')
+def nexusPassword = nexusSetting('NEXUS_PASSWORD')
+if ((nexusUsername && !nexusPassword) || (!nexusUsername && nexusPassword)) {
+    throw new GradleException('Set both NEXUS_USERNAME and NEXUS_PASSWORD when using Nexus credentials')
+}
+
 // Run headless so GradleWorkerMain does not steal focus (mostly a macOS annoyance)
 allprojects {
     tasks.withType(JavaForkOptions) {
         jvmArgs '-Djava.awt.headless=true'
     }
     repositories {
+        if (nexusUrl) {
+            maven {
+                url = uri(nexusUrl)
+                if (nexusUsername) {
+                    credentials {
+                        username = nexusUsername
+                        password = nexusPassword
+                    }
+                }
+            }
+        }
         mavenCentral()
     }
 }
