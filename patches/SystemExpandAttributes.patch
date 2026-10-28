@@ -1,0 +1,24 @@
+diff --git framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
+index 7c5d1d1b..16421ccf 100644
+--- framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
++++ framework/src/main/groovy/org/moqui/impl/context/ExecutionContextFactoryImpl.groovy
+@@ -455,6 +455,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
+ 
+     private ThreadPoolExecutor makeWorkerPool() {
+         MNode toolsNode = confXmlRoot.first('tools')
++        toolsNode.setSystemExpandAttributes(true)
+ 
+         int workerQueueSize = (toolsNode.attribute("worker-queue") ?: "65536") as int
+         BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(workerQueueSize)
+         diff --git a/framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy b/framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
+index 0b0a67b9e..4b6b68492 100644
+--- a/framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
++++ b/framework/src/main/groovy/org/moqui/impl/entity/EntityFacadeImpl.groovy
+@@ -322,6 +322,7 @@ class EntityFacadeImpl implements EntityFacade {
+             inlineJdbc = datasourceNode.first("inline-jdbc")
+             if (jndiJdbcNode == null && inlineJdbc == null) {
+                 MNode dbNode = efi.getDatabaseNode(groupName)
++                inlineJdbc.setSystemExpandAttributes(true)
+                 inlineJdbc = dbNode.first("inline-jdbc")
+             }
+             MNode xaProperties = inlineJdbc?.first("xa-properties")
