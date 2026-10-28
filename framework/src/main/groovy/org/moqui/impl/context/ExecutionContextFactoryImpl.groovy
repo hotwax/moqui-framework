@@ -455,6 +455,7 @@ class ExecutionContextFactoryImpl implements ExecutionContextFactory {
 
     private ThreadPoolExecutor makeWorkerPool() {
         MNode toolsNode = confXmlRoot.first('tools')
+        toolsNode.setSystemExpandAttributes(true)
 
         int workerQueueSize = (toolsNode.attribute("worker-queue") ?: "65536") as int
         BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(workerQueueSize)
