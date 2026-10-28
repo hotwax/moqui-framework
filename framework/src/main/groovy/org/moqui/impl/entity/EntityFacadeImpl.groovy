@@ -322,6 +322,7 @@ class EntityFacadeImpl implements EntityFacade {
             inlineJdbc = datasourceNode.first("inline-jdbc")
             if (jndiJdbcNode == null && inlineJdbc == null) {
                 MNode dbNode = efi.getDatabaseNode(groupName)
+                inlineJdbc.setSystemExpandAttributes(true)
                 inlineJdbc = dbNode.first("inline-jdbc")
             }
             MNode xaProperties = inlineJdbc?.first("xa-properties")
