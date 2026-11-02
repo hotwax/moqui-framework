@@ -40,9 +40,6 @@ def nexusSetting = { String name ->
 def nexusUrl = nexusSetting('NEXUS_URL')?.trim()
 def nexusUsername = nexusSetting('NEXUS_USERNAME')
 def nexusPassword = nexusSetting('NEXUS_PASSWORD')
-if ((nexusUsername && !nexusPassword) || (!nexusUsername && nexusPassword)) {
-    throw new GradleException('Set both NEXUS_USERNAME and NEXUS_PASSWORD when using Nexus credentials')
-}
 
 // Run headless so GradleWorkerMain does not steal focus (mostly a macOS annoyance)
 allprojects {
