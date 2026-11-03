@@ -29,13 +29,48 @@ dependencyUpdates.resolutionStrategy {
     }
 }
 
+// Maven Repository Proxy / Mirror Configuration:
+// To route downloads through an internal Nexus proxy (e.g. when Maven Central is blocked),
+// set NEXUS_URL in gradle.properties, ~/.gradle/gradle.properties, or as an environment variable:
+//   NEXUS_URL=https://nexus.hotwax.io/repository/maven-central/
+//   NEXUS_USERNAME=your-username (optional)
+//   NEXUS_PASSWORD=your-password (optional)
+// When NEXUS_URL is set, Gradle uses the proxy exclusively and bypasses Maven Central.
+// When NEXUS_URL is not set, builds fall back to standard mavenCentral().
+def nexusSetting = { String name ->
+    providers.gradleProperty(name).getOrNull() ?: System.getenv(name)
+}
+def nexusUrl = nexusSetting('NEXUS_URL')?.trim()
+def nexusUsername = nexusSetting('NEXUS_USERNAME')
+def nexusPassword = nexusSetting('NEXUS_PASSWORD')
+def mavenRepoBase = nexusUrl ? (nexusUrl.endsWith('/') ? nexusUrl : "${nexusUrl}/") : 'https://repo1.maven.org/maven2/'
+
 // Run headless so GradleWorkerMain does not steal focus (mostly a macOS annoyance)
 allprojects {
     tasks.withType(JavaForkOptions) {
         jvmArgs '-Djava.awt.headless=true'
     }
     repositories {
-        mavenCentral()
+        if (nexusUrl) {
+            maven {
+                url = uri(nexusUrl)
+                if (nexusUsername) {
+                    credentials {
+                        username = nexusUsername
+                        password = nexusPassword
+                    }
+                }
+                content {
+                    excludeGroup 'org.moqui'
+                }
+            }
+        } else {
+            mavenCentral {
+                content {
+                    excludeGroup 'org.moqui'
+                }
+            }
+        }
     }
 }
 
@@ -287,18 +322,28 @@ task getPostgresJdbc {
         fileTree(dir: libDir, include: 'postgres*.jar').each { it.delete() }
 
         // Get the latest version from Maven repository
-        def metadataUrl = 'https://repo1.maven.org/maven2/org/postgresql/postgresql/maven-metadata.xml'
+        def metadataUrl = "${mavenRepoBase}org/postgresql/postgresql/maven-metadata.xml"
         def metadataFile = file("${buildDir}/postgresql-maven-metadata.xml")
-        ant.get(src: metadataUrl, dest: metadataFile)
+        def getArgs = [src: metadataUrl, dest: metadataFile]
+        if (nexusUsername) {
+            getArgs.username = nexusUsername
+            if (nexusPassword) getArgs.password = nexusPassword
+        }
+        ant.get(getArgs)
         def metadata = new XmlSlurper().parse(metadataFile)
         def latestVersion = metadata.versioning.latest.text()
         metadataFile.delete()
 
         // Download the latest version
-        def downloadUrl = "https://repo1.maven.org/maven2/org/postgresql/postgresql/${latestVersion}/postgresql-${latestVersion}.jar"
+        def downloadUrl = "${mavenRepoBase}org/postgresql/postgresql/${latestVersion}/postgresql-${latestVersion}.jar"
         def jarFile = file("${libDir}/postgresql-${latestVersion}.jar")
         logger.lifecycle("Downloading PostgreSQL JDBC driver ${latestVersion} from ${downloadUrl}")
-        ant.get(src: downloadUrl, dest: jarFile)
+        def downloadArgs = [src: downloadUrl, dest: jarFile]
+        if (nexusUsername) {
+            downloadArgs.username = nexusUsername
+            if (nexusPassword) downloadArgs.password = nexusPassword
+        }
+        ant.get(downloadArgs)
         logger.lifecycle("Downloaded PostgreSQL JDBC driver to ${jarFile}")
     }
 }
@@ -314,18 +359,28 @@ task getMySqlJdbc {
         fileTree(dir: libDir, include: 'mysql-connector*.jar').each { it.delete() }
 
         // Get the latest version from Maven repository
-        def metadataUrl = 'https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/maven-metadata.xml'
+        def metadataUrl = "${mavenRepoBase}com/mysql/mysql-connector-j/maven-metadata.xml"
         def metadataFile = file("${buildDir}/mysql-connector-j-maven-metadata.xml")
-        ant.get(src: metadataUrl, dest: metadataFile)
+        def getArgs = [src: metadataUrl, dest: metadataFile]
+        if (nexusUsername) {
+            getArgs.username = nexusUsername
+            if (nexusPassword) getArgs.password = nexusPassword
+        }
+        ant.get(getArgs)
         def metadata = new XmlSlurper().parse(metadataFile)
         def latestVersion = metadata.versioning.latest.text()
         metadataFile.delete()
 
         // Download the latest version
-        def downloadUrl = "https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${latestVersion}/mysql-connector-j-${latestVersion}.jar"
+        def downloadUrl = "${mavenRepoBase}com/mysql/mysql-connector-j/${latestVersion}/mysql-connector-j-${latestVersion}.jar"
         def jarFile = file("${libDir}/mysql-connector-j-${latestVersion}.jar")
         logger.lifecycle("Downloading MySQL JDBC driver ${latestVersion} from ${downloadUrl}")
-        ant.get(src: downloadUrl, dest: jarFile)
+        def downloadArgs = [src: downloadUrl, dest: jarFile]
+        if (nexusUsername) {
+            downloadArgs.username = nexusUsername
+            if (nexusPassword) downloadArgs.password = nexusPassword
+        }
+        ant.get(downloadArgs)
         logger.lifecycle("Downloaded MySQL JDBC driver to ${jarFile}")
     }
 }

@@ -21,8 +21,13 @@ plugins {
 version = '4.0.0'
 
 repositories {
-    flatDir name: 'localLib', dirs: projectDir.absolutePath + '/lib'
-    mavenCentral()
+    flatDir {
+        name 'localLib'
+        dirs projectDir.absolutePath + '/lib'
+        content {
+            includeGroup 'org.moqui'
+        }
+    }
 }
 
 java {
