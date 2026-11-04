@@ -41,8 +41,8 @@ def nexusSetting = { String name ->
     providers.gradleProperty(name).getOrNull() ?: System.getenv(name)
 }
 def nexusUrl = nexusSetting('NEXUS_URL')?.trim()
-def nexusUsername = nexusSetting('NEXUS_USERNAME')
-def nexusPassword = nexusSetting('NEXUS_PASSWORD')
+def nexusUsername = nexusSetting('NEXUS_USERNAME')?.trim()
+def nexusPassword = nexusSetting('NEXUS_PASSWORD')?.trim()
 
 // Run headless so GradleWorkerMain does not steal focus (mostly a macOS annoyance)
 allprojects {
@@ -50,25 +50,29 @@ allprojects {
         jvmArgs '-Djava.awt.headless=true'
     }
     repositories {
+        exclusiveContent {
+            forRepository {
+                flatDir {
+                    name 'localLib'
+                    dirs rootProject.file('framework/lib').absolutePath
+                }
+            }
+            filter {
+                includeGroup 'org.moqui'
+            }
+        }
         if (nexusUrl) {
             maven {
                 url = uri(nexusUrl)
-                if (nexusUsername) {
+                if (nexusUsername && nexusPassword) {
                     credentials {
                         username = nexusUsername
                         password = nexusPassword
                     }
                 }
-                content {
-                    excludeGroup 'org.moqui'
-                }
             }
         } else {
-            mavenCentral {
-                content {
-                    excludeGroup 'org.moqui'
-                }
-            }
+            mavenCentral()
         }
     }
 }

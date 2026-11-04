@@ -5,16 +5,18 @@ pluginManagement {
         if (nexusUrl) {
             maven {
                 url = uri(nexusUrl)
-                def nexusUsername = providers.gradleProperty('NEXUS_USERNAME').getOrNull() ?: System.getenv('NEXUS_USERNAME')
-                if (nexusUsername) {
+                def nexusUsername = providers.gradleProperty('NEXUS_USERNAME').getOrNull()?.trim() ?: System.getenv('NEXUS_USERNAME')?.trim()
+                def nexusPassword = providers.gradleProperty('NEXUS_PASSWORD').getOrNull()?.trim() ?: System.getenv('NEXUS_PASSWORD')?.trim()
+                if (nexusUsername && nexusPassword) {
                     credentials {
                         username = nexusUsername
-                        password = providers.gradleProperty('NEXUS_PASSWORD').getOrNull() ?: System.getenv('NEXUS_PASSWORD')
+                        password = nexusPassword
                     }
                 }
             }
+        } else {
+            gradlePluginPortal()
         }
-        gradlePluginPortal()
     }
 }
 
