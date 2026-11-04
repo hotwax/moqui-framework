@@ -29,13 +29,51 @@ dependencyUpdates.resolutionStrategy {
     }
 }
 
+// Maven Repository Proxy / Mirror Configuration:
+// To route downloads through an internal Nexus proxy (e.g. when Maven Central is blocked),
+// set NEXUS_URL in gradle.properties, ~/.gradle/gradle.properties, or as an environment variable:
+//   NEXUS_URL=https://nexus.hotwax.io/repository/maven-central/
+//   NEXUS_USERNAME=your-username (optional)
+//   NEXUS_PASSWORD=your-password (optional)
+// When NEXUS_URL is set, Gradle uses the proxy exclusively and bypasses Maven Central.
+// When NEXUS_URL is not set, builds fall back to standard mavenCentral().
+def nexusSetting = { String name ->
+    providers.gradleProperty(name).getOrNull() ?: System.getenv(name)
+}
+def nexusUrl = nexusSetting('NEXUS_URL')?.trim()
+def nexusUsername = nexusSetting('NEXUS_USERNAME')?.trim()
+def nexusPassword = nexusSetting('NEXUS_PASSWORD')?.trim()
+
 // Run headless so GradleWorkerMain does not steal focus (mostly a macOS annoyance)
 allprojects {
     tasks.withType(JavaForkOptions) {
         jvmArgs '-Djava.awt.headless=true'
     }
     repositories {
-        mavenCentral()
+        exclusiveContent {
+            forRepository {
+                flatDir {
+                    name 'localLib'
+                    dirs rootProject.file('framework/lib').absolutePath
+                }
+            }
+            filter {
+                includeGroup 'org.moqui'
+            }
+        }
+        if (nexusUrl) {
+            maven {
+                url = uri(nexusUrl)
+                if (nexusUsername && nexusPassword) {
+                    credentials {
+                        username = nexusUsername
+                        password = nexusPassword
+                    }
+                }
+            }
+        } else {
+            mavenCentral()
+        }
     }
 }
 

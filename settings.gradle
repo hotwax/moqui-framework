@@ -1,4 +1,25 @@
 
+pluginManagement {
+    repositories {
+        def nexusUrl = (providers.gradleProperty('NEXUS_URL').getOrNull() ?: System.getenv('NEXUS_URL'))?.trim()
+        if (nexusUrl) {
+            maven {
+                url = uri(nexusUrl)
+                def nexusUsername = providers.gradleProperty('NEXUS_USERNAME').getOrNull()?.trim() ?: System.getenv('NEXUS_USERNAME')?.trim()
+                def nexusPassword = providers.gradleProperty('NEXUS_PASSWORD').getOrNull()?.trim() ?: System.getenv('NEXUS_PASSWORD')?.trim()
+                if (nexusUsername && nexusPassword) {
+                    credentials {
+                        username = nexusUsername
+                        password = nexusPassword
+                    }
+                }
+            }
+        } else {
+            gradlePluginPortal()
+        }
+    }
+}
+
 String[] getDirectoryProjects(String relativePath) {
     File runtimeDir = file('runtime')
     if (!runtimeDir.exists()) return new String[0]
