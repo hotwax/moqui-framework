@@ -20,6 +20,10 @@ plugins {
 
 version = '4.0.0'
 
+repositories {
+    flatDir name: 'localLib', dirs: projectDir.absolutePath + '/lib'
+    mavenCentral()
+}
 
 java {
     sourceCompatibility = 21
