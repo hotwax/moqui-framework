@@ -132,8 +132,7 @@ along with this software (see the LICENSE.md file). If not, see
             <set field="userAccount.successiveFailedLogins"
                  from="userAccount.successiveFailedLogins ? userAccount.successiveFailedLogins + 1 : 1"/>
             <set field="maxFailures" from="(ec.ecfi.confXmlRoot.first('user-facade').first('login').attribute('max-failures') ?: 3) as Integer"/>
-            <!-- Start or refresh a timed lockout. Preserve an administrative disable,
-                 represented by disabled=Y with no disabledDateTime. -->
+            <!-- Preserve permanent administrative disables; refresh only timed lockouts. -->
             <if condition="userAccount.successiveFailedLogins > maxFailures &amp;&amp; (userAccount.disabled != 'Y' || userAccount.disabledDateTime != null)">
                 <set field="userAccount.disabled" value="Y"/>
                 <set field="userAccount.disabledDateTime" from="ec.user.nowTimestamp"/>
