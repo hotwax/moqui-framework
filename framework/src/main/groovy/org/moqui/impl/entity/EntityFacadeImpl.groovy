@@ -1221,6 +1221,7 @@ class EntityFacadeImpl implements EntityFacade {
         String databaseConfName = datasourceNode.attribute("database-conf-name")
         MNode node = ecfi.confXmlRoot.first("database-list")
                 .first({ MNode it -> it.name == 'database' && it.attribute("name") == databaseConfName })
+        if (node != null) node.setSystemExpandAttributes(true)
         databaseNodeByGroupName.put(groupName, node)
         return node
     }
