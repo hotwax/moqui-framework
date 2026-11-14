@@ -611,6 +611,14 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
                 }
 
                 if (hasSecaRules) ServiceFacadeImpl.runSecaRules(serviceNameNoHash, currentParameters, result, "post-service", secaRules, eci);
+
+                // if we got any errors added to the message list, rollback for that too; same as callSingle() does
+                // for services with a definition. Without this an entity-auto CRUD call with no ServiceDefinition
+                // commits even when an EECA or SECA rule added an error, so validation rules written as
+                // <return error="true"/> are silently ignored on this path only.
+                if (eci.messageFacade.hasError()) {
+                    tf.rollback(beganTransaction, "Error running service " + serviceName + " (message): " + eci.messageFacade.getErrorsString(), null);
+                }
             } catch (ArtifactAuthorizationException e) {
                 tf.rollback(beganTransaction, "Authorization error running service " + serviceName, e);
                 // this is a local call, pass certain exceptions through
