@@ -611,6 +611,11 @@ public class ServiceCallSyncImpl extends ServiceCallImpl implements ServiceCallS
                 }
 
                 if (hasSecaRules) ServiceFacadeImpl.runSecaRules(serviceNameNoHash, currentParameters, result, "post-service", secaRules, eci);
+
+                // if we got any errors added to the message list in the service, rollback for that too
+                if (eci.messageFacade.hasError()) {
+                    tf.rollback(beganTransaction, "Error running service " + serviceName + " (message): " + eci.messageFacade.getErrorsString(), null);
+                }
             } catch (ArtifactAuthorizationException e) {
                 tf.rollback(beganTransaction, "Authorization error running service " + serviceName, e);
                 // this is a local call, pass certain exceptions through
