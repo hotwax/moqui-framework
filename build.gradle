@@ -1294,7 +1294,7 @@ File downloadComponent(String targetDirPath, String type, Node component, Node a
         if (privateRepo) {
             def compVersion = component.'@version'
             // Private repository release tags include a v prefix, including release candidates.
-            def releaseTagPattern = ~/^v?\d+\.\d+\.\d+(?:-RC\d+)?$/
+            def releaseTagPattern = ~/^v?\d+\.\d+\.\d+(?:\.\d+)?(?:-RC\d+)?$/
 
             if (compVersion ==~ releaseTagPattern && !compVersion.startsWith('v')) {
                 compVersion = "v$compVersion"
